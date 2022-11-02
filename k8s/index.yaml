@@ -1,0 +1,15 @@
+apiVersion: v1
+entries:
+  glpi:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2022-11-02T19:11:00.6677248-03:00"
+    description: A Helm chart for deploy GLPI 10.0.3 Free Asset and IT Management
+      Software Containerization in Kubernetes
+    digest: fe6abfd4e5419538646433fff5337f8a5003f4aa01ca92c1c66ca902d1a8c234
+    name: glpi
+    type: application
+    urls:
+    - glpi-0.1.0.tgz
+    version: 0.1.0
+generated: "2022-11-02T19:11:00.6657262-03:00"
