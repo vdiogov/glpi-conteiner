@@ -26,12 +26,6 @@ RUN docker-php-ext-install bz2
 
 RUN docker-php-ext-install opcache
 
-RUN useradd -ms /bin/bash admin
-
-RUN chown -R admin:admin /var/www/html
-
-USER admin
-
 VOLUME [/var/www/html]
 
-EXPOSE 80/tcp
+EXPOSE 8080/tcp
