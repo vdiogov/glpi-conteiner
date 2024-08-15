@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -165,5 +165,33 @@ body.horizontal-layout {
     .saved-searches-panel {
         left: 0 !important;
         min-width: 200px;
+    }
+}
+
+.sortable-savedsearches {
+    .sortable-placeholder {
+        background: #e7f06367;
+        border: 1px dashed #ccc;
+        padding: 10px;
+        margin: 10px;
+        opacity: 0.5;
+    }
+
+    .grip-savedsearch {
+        cursor: pointer;
+        cursor: grab;
+
+        &:active {
+            cursor: grabbing;
+        }
+
+        &:hover::before {
+            content: "\ec01";
+            font-family: tabler-icons;
+            font-weight: 900;
+            color: $secondary;
+            margin-left: -1rem;
+            width: 1rem;
+        }
     }
 }

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,8 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Mail\SMTP\OauthConfig;
+use Glpi\Mail\SMTP\OAuthTokenProvider;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 
@@ -48,11 +50,14 @@ class GLPIMailer extends PHPMailer
      **/
     public function __construct()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $this->WordWrap           = 80;
 
         $this->CharSet            = "utf-8";
+
+        $this->Encoding           = self::ENCODING_QUOTED_PRINTABLE;
 
        // Comes from config
         $this->SetLanguage("en", Config::getLibraryDir("PHPMailer") . "/language/");
@@ -61,27 +66,51 @@ class GLPIMailer extends PHPMailer
             $this->Mailer = "smtp";
             $this->Host   = $CFG_GLPI['smtp_host'] . ':' . $CFG_GLPI['smtp_port'];
 
-            if ($CFG_GLPI['smtp_username'] != '') {
+            if ($CFG_GLPI['smtp_mode'] == MAIL_SMTPOAUTH) {
+                $this->SMTPSecure = 'tls';
                 $this->SMTPAuth = true;
-                $this->Username = $CFG_GLPI['smtp_username'];
-                $this->Password = (new GLPIKey())->decrypt($CFG_GLPI['smtp_passwd']);
-            }
+                $this->AuthType = 'XOAUTH2';
+                $provider = OauthConfig::getInstance()->getSmtpOauthProvider();
+                if ($provider !== null) {
+                    $client_id     = $CFG_GLPI['smtp_oauth_client_id'];
+                    $client_secret = (new GLPIKey())->decrypt($CFG_GLPI['smtp_oauth_client_secret']);
+                    $refresh_token = (new GLPIKey())->decrypt($CFG_GLPI['smtp_oauth_refresh_token']);
 
-            if ($CFG_GLPI['smtp_mode'] == MAIL_SMTPSSL) {
-                $this->SMTPSecure = "ssl";
-            } else if ($CFG_GLPI['smtp_mode'] == MAIL_SMTPTLS) {
-                $this->SMTPSecure = "tls";
+                    $this->setOAuth(
+                        new OAuthTokenProvider(
+                            [
+                                'provider'     => $provider,
+                                'clientId'     => $client_id,
+                                'clientSecret' => $client_secret,
+                                'refreshToken' => $refresh_token,
+                                'userName'     => $CFG_GLPI['smtp_username'],
+                            ]
+                        )
+                    );
+                }
             } else {
-               // Don't automatically enable encryption if the GLPI config doesn't specify it
-                $this->SMTPAutoTLS = false;
-            }
+                if ($CFG_GLPI['smtp_username'] != '') {
+                    $this->SMTPAuth = true;
+                    $this->Username = $CFG_GLPI['smtp_username'];
+                    $this->Password = (new GLPIKey())->decrypt($CFG_GLPI['smtp_passwd']);
+                }
 
-            if (!$CFG_GLPI['smtp_check_certificate']) {
-                $this->SMTPOptions = ['ssl' => ['verify_peer'       => false,
-                    'verify_peer_name'  => false,
-                    'allow_self_signed' => true
-                ]
-                ];
+                if ($CFG_GLPI['smtp_mode'] == MAIL_SMTPSSL) {
+                    $this->SMTPSecure = "ssl";
+                } else if ($CFG_GLPI['smtp_mode'] == MAIL_SMTPTLS) {
+                    $this->SMTPSecure = "tls";
+                } else {
+                   // Don't automatically enable encryption if the GLPI config doesn't specify it
+                    $this->SMTPAutoTLS = false;
+                }
+
+                if (!$CFG_GLPI['smtp_check_certificate']) {
+                    $this->SMTPOptions = ['ssl' => ['verify_peer'       => false,
+                        'verify_peer_name'  => false,
+                        'allow_self_signed' => true
+                    ]
+                    ];
+                }
             }
             if ($CFG_GLPI['smtp_sender'] != '') {
                 $this->Sender = $CFG_GLPI['smtp_sender'];
@@ -93,10 +122,37 @@ class GLPIMailer extends PHPMailer
             $this->Debugoutput = function ($message, $level) {
                 Toolbox::logInFile(
                     'mail-debug',
-                    "$level - $message"
+                    "$level - $message\n"
                 );
             };
         }
+    }
+
+    public function smtpConnect($options = null)
+    {
+        /** @var array $CFG_GLPI */
+        global $CFG_GLPI;
+
+        $result = parent::smtpConnect($options);
+
+        if (
+            $this->oauth instanceof OAuthTokenProvider
+            && $result === true
+            && ($refresh_token = $this->oauth->getOauthToken()->getRefreshToken() ?? null) !== null
+            && $refresh_token !== (new GLPIKey())->decrypt($CFG_GLPI['smtp_oauth_refresh_token'])
+        ) {
+            // The refresh token may be refreshed itself.
+            // Be sure to always store any new refresh token.
+            Config::setConfigurationValues(
+                'core',
+                [
+                    'smtp_oauth_refresh_token' => $refresh_token,
+                ]
+            );
+            $CFG_GLPI['smtp_oauth_refresh_token'] = (new GLPIKey())->encrypt($refresh_token);
+        }
+
+        return $result;
     }
 
     public static function validateAddress($address, $patternselect = "pcre8")

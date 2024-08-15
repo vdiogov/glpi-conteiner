@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -40,6 +40,10 @@
  **/
 function update93xto940()
 {
+    /**
+     * @var \DBmysql $DB
+     * @var \Migration $migration
+     */
     global $DB, $migration;
     $dbutils = new DbUtils();
 
@@ -126,7 +130,7 @@ function update93xto940()
     $migration->createRule($rule, $criteria, $action);
 
     if (!countElementsInTable('glpi_profilerights', ['profiles_id' => 4, 'name' => 'rule_asset'])) {
-        $DB->insert("glpi_profilerights", [
+        $DB->insertOrDie("glpi_profilerights", [
             'id'           => null,
             'profiles_id'  => "4",
             'name'         => "rule_asset",

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -66,6 +66,10 @@ abstract class CommonITILValidation extends CommonDBChild
         return str_replace('Validation', '', $this->getType());
     }
 
+    public static function getIcon()
+    {
+        return 'ti ti-thumb-up';
+    }
 
     public static function getCreateRights()
     {
@@ -192,6 +196,7 @@ abstract class CommonITILValidation extends CommonDBChild
      **/
     public static function canValidate($items_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -214,7 +219,7 @@ abstract class CommonITILValidation extends CommonDBChild
 
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
-
+        /** @var CommonDBTM $item */
         $hidetab = false;
        // Hide if no rights on validations
         if (!static::canView()) {
@@ -291,6 +296,7 @@ abstract class CommonITILValidation extends CommonDBChild
 
     public function post_addItem()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         // Handle rich-text images
@@ -407,8 +413,9 @@ abstract class CommonITILValidation extends CommonDBChild
     }
 
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $item    = new static::$itemtype();
@@ -476,7 +483,7 @@ abstract class CommonITILValidation extends CommonDBChild
      **/
     public function getHistoryChangeWhenUpdateField($field)
     {
-
+        $result = [];
         if ($field == 'status') {
             $username = getUserName($this->fields["users_id_validate"]);
 
@@ -488,9 +495,8 @@ abstract class CommonITILValidation extends CommonDBChild
                //TRANS: %s is the username
                 $result[2] = sprintf(__('Update the approval request to %s'), $username);
             }
-            return $result;
         }
-        return false;
+        return $result;
     }
 
 
@@ -656,6 +662,7 @@ abstract class CommonITILValidation extends CommonDBChild
      **/
     public static function getNumberToValidate($users_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $row = $DB->request([
@@ -679,6 +686,7 @@ abstract class CommonITILValidation extends CommonDBChild
      **/
     public static function getTicketStatusNumber($items_id, $status)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $row = $DB->request([
@@ -706,6 +714,7 @@ abstract class CommonITILValidation extends CommonDBChild
      **/
     public static function alreadyExists($items_id, $users_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -731,6 +740,7 @@ abstract class CommonITILValidation extends CommonDBChild
     public static function showFormMassiveAction()
     {
 
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $types            = ['user'  => User::getTypeName(1),
@@ -838,7 +848,11 @@ abstract class CommonITILValidation extends CommonDBChild
      **/
     public function showSummary(CommonDBTM $item)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         if (
             !Session::haveRightsOr(
@@ -925,6 +939,7 @@ abstract class CommonITILValidation extends CommonDBChild
            "</th></tr>";
 
         if ($canadd) {
+            /** @var CommonITILObject $item */
             if (
                 !in_array($item->fields['status'], array_merge(
                     $item->getSolvedStatusArray(),
@@ -1364,6 +1379,7 @@ abstract class CommonITILValidation extends CommonDBChild
      **/
     public static function dropdownValidator(array $options = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $params = [
@@ -1505,7 +1521,7 @@ abstract class CommonITILValidation extends CommonDBChild
 
         if ($total = count($validations)) {
             foreach ($validations as $validation) {
-                $statuses[$validation['status']] ++;
+                $statuses[$validation['status']]++;
             }
         }
 
@@ -1595,6 +1611,7 @@ abstract class CommonITILValidation extends CommonDBChild
      */
     public static function alertValidation(CommonITILObject $item, $type)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        // No alert for new item

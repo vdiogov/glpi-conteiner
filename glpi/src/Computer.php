@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -74,7 +74,8 @@ class Computer extends CommonDBTM
             Computer_Item::class,
             Notepad::class,
             KnowbaseItem_Item::class,
-            Item_RemoteManagement::class
+            Item_RemoteManagement::class,
+            ComputerAntivirus::class
         ];
     }
 
@@ -150,9 +151,13 @@ class Computer extends CommonDBTM
     }
 
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $changes = [];
         $update_count = count($this->updates ?? []);
@@ -196,8 +201,9 @@ class Computer extends CommonDBTM
 
         if (count($changes)) {
             $update_done = false;
+            $is_input_dynamic = (bool) ($this->input['is_dynamic'] ?? false);
 
-           // Propagates the changes to linked items
+            // Propagates the changes to linked items
             foreach ($CFG_GLPI['directconnect_types'] as $type) {
                 $items_result = $DB->request(
                     [
@@ -215,8 +221,13 @@ class Computer extends CommonDBTM
                      $tID = $data['items_id'];
                      $item->getFromDB($tID);
                     if (!$item->getField('is_global')) {
-                        $changes['id'] = $item->getField('id');
-                        if ($item->update($changes)) {
+                        $item_input = $changes;
+                        $item_input['id'] = $item->getID();
+                        //propage is_dynamic value if needed to prevent locked fields
+                        if ((bool) ($item->fields['is_dynamic'] ?? false) && $is_input_dynamic) {
+                            $item_input['is_dynamic'] = 1;
+                        }
+                        if ($item->update($item_input)) {
                             $update_done = true;
                         }
                     }
@@ -245,10 +256,15 @@ class Computer extends CommonDBTM
                         ]
                     );
                     foreach ($devices_result as $data) {
-                           $tID = $data['id'];
-                           $item->getFromDB($tID);
-                           $changes['id'] = $item->getField('id');
-                        if ($item->update($changes)) {
+                        $tID = $data['id'];
+                        $item->getFromDB($tID);
+                        $item_input = $changes;
+                        $item_input['id'] = $item->getID();
+                        //propage is_dynamic value if needed to prevent locked fields
+                        if ((bool) ($item->fields['is_dynamic'] ?? false) && $is_input_dynamic) {
+                            $item_input['is_dynamic'] = 1;
+                        }
+                        if ($item->update($item_input)) {
                             $update_done = true;
                         }
                     }
@@ -303,27 +319,17 @@ class Computer extends CommonDBTM
 
         $this->deleteChildrenAndRelationsFromDb(
             [
-                Certificate_Item::class,
                 Computer_Item::class,
-                Item_SoftwareLicense::class,
-                Item_SoftwareVersion::class,
                 ComputerAntivirus::class,
                 ComputerVirtualMachine::class,
-                Item_Disk::class,
-                Item_Project::class,
             ]
-        );
-
-        Item_Devices::cleanItemDeviceDBOnItemDelete(
-            $this->getType(),
-            $this->fields['id'],
-            (!empty($this->input['keep_devices']))
         );
     }
 
 
     public function getLinkedItems()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -451,6 +457,14 @@ class Computer extends CommonDBTM
         ];
 
         $tab[] = [
+            'id'                 => '10',
+            'table'              => $this->getTable(),
+            'field'              => 'last_boot',
+            'name'               => __('Last boot date'),
+            'datatype'           => 'datetime',
+        ];
+
+        $tab[] = [
             'id'                 => '16',
             'table'              => $this->getTable(),
             'field'              => 'comment',
@@ -531,7 +545,7 @@ class Computer extends CommonDBTM
             'table'              => 'glpi_users',
             'field'              => 'name',
             'linkfield'          => 'users_id_tech',
-            'name'               => __('Technician in charge of the hardware'),
+            'name'               => __('Technician in charge'),
             'datatype'           => 'dropdown',
             'right'              => 'own_ticket'
         ];
@@ -541,7 +555,7 @@ class Computer extends CommonDBTM
             'table'              => 'glpi_groups',
             'field'              => 'completename',
             'linkfield'          => 'groups_id_tech',
-            'name'               => __('Group in charge of the hardware'),
+            'name'               => __('Group in charge'),
             'condition'          => ['is_assign' => 1],
             'datatype'           => 'dropdown'
         ];
@@ -590,9 +604,11 @@ class Computer extends CommonDBTM
 
         $tab = array_merge($tab, Rack::rawSearchOptionsToAdd(get_class($this)));
 
-        $tab = array_merge($tab, Socket::rawSearchOptionsToAdd(get_class($this)));
+        $tab = array_merge($tab, Socket::rawSearchOptionsToAdd());
 
         $tab = array_merge($tab, Agent::rawSearchOptionsToAdd());
+
+        $tab = array_merge($tab, DCRoom::rawSearchOptionsToAdd());
 
         return $tab;
     }

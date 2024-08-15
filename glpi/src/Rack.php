@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -254,7 +254,7 @@ class Rack extends CommonDBTM
             'table'              => 'glpi_users',
             'field'              => 'name',
             'linkfield'          => 'users_id_tech',
-            'name'               => __('Technician in charge of the hardware'),
+            'name'               => __('Technician in charge'),
             'datatype'           => 'dropdown',
             'right'              => 'own_ticket'
         ];
@@ -264,7 +264,7 @@ class Rack extends CommonDBTM
             'table'              => 'glpi_groups',
             'field'              => 'completename',
             'linkfield'          => 'groups_id_tech',
-            'name'               => __('Group in charge of the hardware'),
+            'name'               => __('Group in charge'),
             'condition'          => ['is_assign' => 1],
             'datatype'           => 'dropdown'
         ];
@@ -286,6 +286,19 @@ class Rack extends CommonDBTM
             'field'              => 'completename',
             'name'               => Entity::getTypeName(1),
             'datatype'           => 'dropdown'
+        ];
+
+        $tab[] = [
+            'id'                 => '81',
+            'table'              => Datacenter::getTable(),
+            'field'              => 'name',
+            'name'               => Datacenter::getTypeName(1),
+            'datatype'           => 'dropdown',
+            'joinparams'         => [
+                'beforejoin'         => [
+                    'table'              => DCRoom::getTable(),
+                ]
+            ]
         ];
 
         $tab = array_merge($tab, Notepad::rawSearchOptionsToAdd());
@@ -338,7 +351,11 @@ class Rack extends CommonDBTM
      **/
     public static function showForRoom(DCRoom $room)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $room_id = $room->getID();
         $rand = mt_rand();
@@ -700,6 +717,9 @@ JAVASCRIPT;
             }
             unset($input['id']);
             unset($input['withtemplate']);
+            if (!isset($input['bgcolor']) || empty($input['bgcolor'])) {
+                $input['bgcolor'] = '#FEC95C';
+            }
 
             return $input;
         }
@@ -708,6 +728,9 @@ JAVASCRIPT;
 
     public function prepareInputForUpdate($input)
     {
+        if (array_key_exists('bgcolor', $input) && empty($input['bgcolor'])) {
+            $input['bgcolor'] = '#FEC95C';
+        }
         return $this->prepareInput($input);
     }
 
@@ -721,7 +744,7 @@ JAVASCRIPT;
      *
      * @param array $input Input data
      *
-     * @return array
+     * @return false|array
      */
     private function prepareInput($input)
     {
@@ -732,7 +755,6 @@ JAVASCRIPT;
         }
 
         if ($input['position'] == 0) {
-            return $input;
             Session::addMessageAfterRedirect(
                 __('Position must be set'),
                 true,
@@ -775,6 +797,7 @@ JAVASCRIPT;
      */
     public function getFilled($itemtype = null, $items_id = null)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([

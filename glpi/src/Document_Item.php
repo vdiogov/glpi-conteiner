@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -205,6 +205,9 @@ class Document_Item extends CommonDBRelation
     }
 
 
+    /**
+     * @TODO Remove `_do_update_ticket` handling in GLPI 10.1, it is not used anymore.
+     */
     public function post_addItem()
     {
 
@@ -423,10 +426,6 @@ class Document_Item extends CommonDBRelation
             if ($item->canView()) {
                 $iterator = self::getTypeItems($instID, $itemtype);
 
-                if ($itemtype == 'SoftwareLicense') {
-                    $soft = new Software();
-                }
-
                 foreach ($iterator as $data) {
                     $linkname_extra = "";
                     if ($item instanceof ITILFollowup || $item instanceof ITILSolution) {
@@ -453,6 +452,7 @@ class Document_Item extends CommonDBRelation
                     }
 
                     if ($itemtype == 'SoftwareLicense') {
+                        $soft = new Software();
                         $soft->getFromDB($data['softwares_id']);
                         $data["name"] = sprintf(
                             __('%1$s - %2$s'),
@@ -465,7 +465,7 @@ class Document_Item extends CommonDBRelation
                     } else if ($item instanceof Item_Devices) {
                         $linkname = $data["itemtype"];
                     } else {
-                        $linkname = $data["name"];
+                        $linkname = $data[$item::getNameField()];
                     }
                     if (
                         $_SESSION["glpiis_ids_visible"]
@@ -599,7 +599,11 @@ class Document_Item extends CommonDBRelation
      **/
     public static function showAddFormForItem(CommonDBTM $item, $withtemplate = 0, $options = [])
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
        //default options
         $params['rand'] = mt_rand();
@@ -646,7 +650,6 @@ class Document_Item extends CommonDBRelation
                     $entities = $entity;
                 }
             }
-            $limit = getEntitiesRestrictRequest(" AND ", "glpi_documents", '', $entities, true);
 
             $count = $DB->request([
                 'COUNT'     => 'cpt',
@@ -737,6 +740,7 @@ class Document_Item extends CommonDBRelation
      */
     public static function showListForItem(CommonDBTM $item, $withtemplate = 0, $options = [])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        //default options

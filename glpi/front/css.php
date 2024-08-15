@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,8 @@
  * ---------------------------------------------------------------------
  */
 
+$SECURITY_STRATEGY = 'no_check'; // CSS must be accessible also on public pages
+
 if (!defined('GLPI_ROOT')) {
     define('GLPI_ROOT', dirname(__DIR__));
 }
@@ -47,10 +49,11 @@ $skip_db_check               = true;
 include_once GLPI_ROOT . "/inc/db.function.php";
 include_once GLPI_ROOT . '/inc/config.php';
 
-if (Toolbox::getMemoryLimit() < (128 * 1024 * 1024)) {
-    // Main CSS compilation requires about 90MB of memory.
-    // Increase it a bit to ensure it will not reach memory limit.
-    ini_set('memory_limit', '128M');
+// Main CSS compilation requires about 140MB of memory on PHP 7.4 (110MB on PHP 8.2).
+// Ensure to have enough memory to not reach memory limit.
+$max_memory = 192;
+if (Toolbox::getMemoryLimit() < ($max_memory * 1024 * 1024)) {
+    ini_set('memory_limit', sprintf('%dM', $max_memory));
 }
 
 // Ensure warnings will not break CSS output.

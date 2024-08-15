@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -67,6 +67,7 @@ class Calendar extends AbstractBackend
 
     public function getCalendarsForUser($principalPath)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $principal_item = $this->getPrincipalItemFromUri($principalPath);
@@ -165,16 +166,21 @@ class Calendar extends AbstractBackend
     public function getCalendarObjects($calendarId)
     {
 
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $principal_type = \Planning::getActorTypeFromPlanningKey($calendarId);
         $principal_id   = \Planning::getActorIdFromPlanningKey($calendarId);
+
+        $item = null;
         if (null !== $principal_type && is_a($principal_type, \CommonDBTM::class, true) && null !== $principal_id) {
             $item = new $principal_type();
-            $exists = $item->getFromDB($principal_id);
+            if ($item->getFromDB($principal_id) === false) {
+                $item = null;
+            }
         }
 
-        if (!$exists) {
+        if ($item === null) {
             throw new \Sabre\DAV\Exception\NotFound(sprintf('Calendar "%s" not found', $calendarId));
         }
 
@@ -248,7 +254,11 @@ class Calendar extends AbstractBackend
             throw new \Sabre\DAV\Exception\NotFound(sprintf('Object "%s" not found', $objectPath));
         }
 
-        if (!$item->deleteFromDB()) {
+        if (!$item->can($item->fields['id'], PURGE)) {
+            throw new \Sabre\DAV\Exception\Forbidden();
+        }
+
+        if (!$item->delete(['id' => $item->fields['id']], 1)) {
             throw new \Sabre\DAV\Exception('Error during object deletion');
         }
     }
@@ -293,6 +303,7 @@ class Calendar extends AbstractBackend
     private function storeCalendarObject($calendarId, $calendarData, CalDAVCompatibleItemInterface $item = null)
     {
 
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        /* @var \Sabre\VObject\Component\VCalendar $vcalendar */

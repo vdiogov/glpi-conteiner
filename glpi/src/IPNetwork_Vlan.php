@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -92,7 +92,11 @@ class IPNetwork_Vlan extends CommonDBRelation
      **/
     public static function showForIPNetwork(IPNetwork $port)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $ID = $port->getID();
         if (!$port->can($ID, READ)) {
@@ -209,6 +213,7 @@ class IPNetwork_Vlan extends CommonDBRelation
      **/
     public static function getVlansForIPNetwork($portID)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $vlans = [];

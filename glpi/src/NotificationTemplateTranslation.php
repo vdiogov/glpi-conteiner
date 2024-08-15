@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -53,6 +53,10 @@ class NotificationTemplateTranslation extends CommonDBChild
         return _n('Template translation', 'Template translations', $nb);
     }
 
+    public static function getNameField()
+    {
+        return 'id';
+    }
 
     /**
      * @since 0.84
@@ -68,6 +72,7 @@ class NotificationTemplateTranslation extends CommonDBChild
 
     protected function computeFriendlyName()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if ($this->getField('language') != '') {
@@ -93,6 +98,7 @@ class NotificationTemplateTranslation extends CommonDBChild
 
     public function showForm($ID, array $options = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!Config::canUpdate()) {
@@ -184,7 +190,11 @@ class NotificationTemplateTranslation extends CommonDBChild
      **/
     public function showSummary(NotificationTemplate $template, $options = [])
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $nID     = $template->getField('id');
         $canedit = Config::canUpdate();
@@ -296,6 +306,34 @@ class NotificationTemplateTranslation extends CommonDBChild
     public function prepareInputForUpdate($input)
     {
         return parent::prepareInputForUpdate(self::cleanContentHtml($input));
+    }
+
+
+    public function post_addItem()
+    {
+        // Handle rich-text images and uploaded documents
+        $this->input = $this->addFiles($this->input, [
+            'force_update' => true,
+            'name' => 'content_html',
+            'content_field' => 'content_html',
+            '_add_link' => false
+        ]);
+
+        parent::post_addItem();
+    }
+
+
+    public function post_updateItem($history = true)
+    {
+        // Handle rich-text images and uploaded documents
+        $this->input = $this->addFiles($this->input, [
+            'force_update' => true,
+            'name' => 'content_html',
+            'content_field' => 'content_html',
+            '_add_link' => false
+        ]);
+
+        parent::post_updateItem($history);
     }
 
 

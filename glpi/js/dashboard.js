@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -34,30 +34,47 @@
 /* global GridStack, GoInFullscreen, GoOutFullscreen, EasyMDE, getUuidV4, _, sortable */
 /* global glpi_ajax_dialog, glpi_close_all_dialogs */
 
-var Dashboard = {
-    grid: null,
-    elem_id: "",
-    element: null,
-    elem_dom: null,
-    rand: null,
-    interval: null,
-    current_name: null,
-    markdown_editors: [],
-    all_cards: [],
-    all_widgets: [],
-    edit_mode: false,
-    embed: false,
-    ajax_cards: false,
-    context: "core",
-    markdown_contents: [],
-    dash_width: 0,
-    cell_margin: 3,
-    cols: 26,
-    cache_key: "",
-    filters: "{}",
+const Dashboard = {
+    dashboards: {},
 
-    display: function(params) {
-        var that = this;
+    getActiveDashboard: function() {
+        var current_dashboard_index = "";
+        $.each(this.dashboards, function(index, dashboard) {
+            if ($(dashboard.elem_dom).is(':visible')) {
+                current_dashboard_index = index;
+                return false; // Break
+            }
+        });
+
+        return this.dashboards[current_dashboard_index];
+    }
+};
+
+class GLPIDashboard {
+    constructor(params) {
+        const that = this;
+
+        this.grid = null;
+        this.elem_id = "";
+        this.element = null;
+        this.elem_dom = null;
+        this.rand = null;
+        this.interval = null;
+        this.current_name = null;
+        this.markdown_editors = [];
+        this.all_cards = [];
+        this.all_widgets = [];
+        this.edit_mode = false;
+        this.embed = false;
+        this.ajax_cards = false;
+        this.context = "core";
+        this.markdown_contents = [];
+        this.dash_width = 0;
+        this.cell_margin = 3;
+        this.cols = 26;
+        this.cache_key = "";
+        this.filters = "{}";
+        this.filters_selector = "";
 
         // get passed options and merge it with default ones
         var options = (typeof params !== 'undefined')
@@ -69,6 +86,9 @@ var Dashboard = {
             cell_margin: 5,
             rand:        '',
             embed:       false,
+            token:       null,
+            entities_id: null,
+            is_recursive:null,
             ajax_cards:  true,
             all_cards:   [],
             context:     "core"
@@ -77,10 +97,13 @@ var Dashboard = {
 
         this.rand         = options.rand;
         this.elem_id      = "#dashboard-"+options.rand;
-        this.element      = $(Dashboard.elem_id);
-        this.elem_dom     = Dashboard.element[0];
+        this.element      = $(this.elem_id);
+        this.elem_dom     = this.element[0];
         this.current_name = $(this.elem_id+' .dashboard_select').val() || options.current;
         this.embed        = options.embed;
+        this.token        = options.token;
+        this.entities_id  = options.entities_id;
+        this.is_recursive = options.is_recursive;
         this.ajax_cards   = options.ajax_cards;
         this.all_cards    = options.all_cards;
         this.all_widgets  = options.all_widgets;
@@ -89,12 +112,13 @@ var Dashboard = {
         this.cell_margin  = options.cell_margin;
         this.cols         = options.cols;
         this.cache_key    = options.cache_key || "";
+        this.filters_selector = this.elem_id + ' .filters';
 
         // compute the width offset of gridstack container relatively to viewport
         var elem_domRect = this.elem_dom.getBoundingClientRect();
         var width_offset = elem_domRect.left + (window.innerWidth - elem_domRect.right) + 0.02;
 
-        Dashboard.grid = GridStack.init({
+        this.grid = GridStack.init({
             column: options.cols,
             maxRow: (options.rows + 1), // +1 for a hidden item at bottom (to fix height)
             margin : this.cell_margin,
@@ -104,44 +128,39 @@ var Dashboard = {
                 'cancel': 'textarea' // avoid draggable on some child elements
             },
             'minWidth': 768 -  width_offset, // breakpoint of one column mode (based on the dashboard container width), trying to reduce to match the `-md` breakpoint of bootstrap (this last is based on viewport width)
-        });
+        }, "#grid-stack-" + options.rand);
 
         // set grid in static to prevent edition (unless user click on edit button)
         // previously in option, but current version of gridstack has a bug with one column mode (responsive)
         // see https://github.com/gridstack/gridstack.js/issues/1229
-        Dashboard.grid.setStatic(true);
+        this.grid.setStatic(true);
 
         // generate the css based on the grid width
-        Dashboard.generateCss();
+        this.generateCss();
 
         // init filters from storage
-        Dashboard.initFilters();
-        Dashboard.refreshDashboard();
+        this.initFilters();
+        this.refreshDashboard();
 
-        // retieve cards content by ajax
-        if (Dashboard.ajax_cards) {
-            Dashboard.getCardsAjax();
-        }
-
-        // animate the dashboards
-        if (!Dashboard.ajax_cards) {
-            Dashboard.fitNumbers();
-            Dashboard.animateNumbers();
+        // animate the dashboards once all card are loaded (single ajax mode)
+        if (!this.ajax_cards) {
+            this.fitNumbers();
+            this.animateNumbers();
         }
 
         // change dashboard
         $("#dashboard-"+options.rand+" .toolbar .dashboard_select").change(function() {
-            Dashboard.current_name = $(this).val();
+            that.current_name = $(this).val();
             var selected_label = $(this).find("option:selected").text();
             $(".dashboard-name").val(selected_label);
-            Dashboard.refreshDashboard();
-            Dashboard.setLastDashboard();
-            Dashboard.initFilters();
+            that.refreshDashboard();
+            that.setLastDashboard();
+            that.initFilters();
         });
 
         // add dashboard
         $("#dashboard-"+options.rand+" .toolbar .add-dashboard").click(function() {
-            Dashboard.addForm();
+            that.addForm();
         });
         $(document).on('submit', '.display-add-dashboard-form', function(event) {
             event.preventDefault();
@@ -153,17 +172,17 @@ var Dashboard = {
                 form_data[this.name] = this.value;
             });
 
-            Dashboard.addNew(form_data);
+            that.addNew(form_data);
         });
 
         // delete dashboard
         $("#dashboard-"+options.rand+" .toolbar .delete-dashboard").click(function() {
-            Dashboard.delete();
+            that.delete();
         });
 
         //clone dashboard
         $("#dashboard-"+options.rand+" .toolbar .clone-dashboard").click(function() {
-            Dashboard.clone();
+            that.clone();
         });
 
         // embed mode toggle
@@ -173,7 +192,7 @@ var Dashboard = {
                 url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
                 params: {
                     action:  'display_embed_form',
-                    dashboard: Dashboard.current_name
+                    dashboard: that.current_name
                 },
             });
         });
@@ -182,27 +201,27 @@ var Dashboard = {
         $("#dashboard-"+options.rand+" .toolbar .edit-dashboard").click(function() {
             var activate = !$(this).hasClass('active');
 
-            Dashboard.setEditMode(activate);
+            that.setEditMode(activate);
         });
 
         // fullscreen mode toggle
         var expand_selector = "#dashboard-"+options.rand+" .toggle-fullscreen";
         $(expand_selector).click(function() {
-            Dashboard.toggleFullscreenMode($(this));
+            that.toggleFullscreenMode($(this));
         });
         // trigger fullscreen off (by esc key)
         $(document).on('fullscreenchange webkitfullscreenchange mozfullscreenchange MSFullscreenChange', function() {
             if (!document.webkitIsFullScreen
              && !document.mozFullScreen
              && !document.msFullscreenElement !== null) {
-                Dashboard.disableFullscreenMode();
+                that.disableFullscreenMode();
             }
         });
 
         // night mode toggle
         $("#dashboard-"+options.rand+" .toolbar .night-mode").click(function() {
             $(this).toggleClass('active');
-            Dashboard.element.toggleClass('theme-dark');
+            that.element.toggleClass('theme-dark');
         });
 
         // refresh mode toggle
@@ -216,11 +235,11 @@ var Dashboard = {
                     minutes = 30;
                 }
                 var seconds = minutes * 60;
-                Dashboard.interval = setInterval(function() {
-                    Dashboard.refreshDashboard();
+                that.interval = setInterval(function() {
+                    that.refreshDashboard();
                 }, seconds * 1000);
             } else {
-                clearInterval(Dashboard.interval);
+                clearInterval(that.interval);
             }
         });
 
@@ -233,10 +252,10 @@ var Dashboard = {
 
             window.clearTimeout(debounce);
             debounce = window.setTimeout(function() {
-                Dashboard.generateCss();
+                that.generateCss();
 
                 // fit again numbers
-                Dashboard.fitNumbers();
+                that.fitNumbers();
             }, 200);
         });
 
@@ -249,6 +268,9 @@ var Dashboard = {
             var is_private;
             $.each(button.closest('.display-rights-form').serializeArray(), function() {
                 var current_val = this.value.split('-');
+                if (current_val.length !== 2) {
+                    return;
+                }
                 var right_name  = current_val[0];
                 var value       = current_val[1];
                 if (!(right_name in form_data)) {
@@ -262,7 +284,7 @@ var Dashboard = {
                 url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
                 data: {
                     action:     'save_rights',
-                    dashboard:  Dashboard.current_name,
+                    dashboard:  that.current_name,
                     rights:     form_data,
                     is_private: is_private,
                 }
@@ -270,17 +292,17 @@ var Dashboard = {
         });
 
         // event: moving item
-        Dashboard.grid.on('dragstop', function() {
-            Dashboard.saveDashboard();
+        this.grid.on('dragstop', function() {
+            that.saveDashboard();
         });
 
         // event: resize item
-        Dashboard.grid.on('resizestop', function(event, elem) {
-            Dashboard.saveDashboard();
+        this.grid.on('resizestop', function(event, elem) {
+            that.saveDashboard();
 
             // resize also chart if exists
             var chart = $(elem).find('.ct-chart');
-            if (chart.length > 0)  {
+            if (chart.length > 0 && chart[0].__chartist__ != undefined)  {
                 chart[0].__chartist__.update();
             }
 
@@ -290,8 +312,8 @@ var Dashboard = {
             that.resetComputedWidth($('body').find('.big-number').find('.label'));
 
             // animate the number
-            Dashboard.fitNumbers($(elem));
-            Dashboard.animateNumbers($(elem));
+            that.fitNumbers($(elem));
+            that.animateNumbers($(elem));
         });
 
         // delete item
@@ -299,8 +321,8 @@ var Dashboard = {
             var del_ctrl = $(this);
             var item = del_ctrl.closest('.grid-stack-item')[0];
 
-            Dashboard.grid.removeWidget(item);
-            Dashboard.saveDashboard();
+            that.grid.removeWidget(item);
+            that.saveDashboard();
         });
 
         // refresh item
@@ -309,7 +331,7 @@ var Dashboard = {
             var item = refresh_ctrl.closest('.grid-stack-item');
             var id = item.attr('gs-id');
 
-            Dashboard.getCardsAjax("[gs-id="+id+"]");
+            that.getCardsAjax("[gs-id="+id+"]");
         });
 
         // edit item
@@ -323,6 +345,7 @@ var Dashboard = {
                 url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
                 params: {
                     action:       'display_edit_widget',
+                    dashboard:    that.current_name,
                     gridstack_id: item.attr('gs-id'),
                     card_id:      card_opt.card_id,
                     x:            item.attr('gs-x'),
@@ -343,6 +366,7 @@ var Dashboard = {
                 url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
                 params: {
                     action: 'display_add_widget',
+                    dashboard: that.current_name,
                     x: add_ctrl.data('x'),
                     y: add_ctrl.data('y')
                 },
@@ -353,14 +377,14 @@ var Dashboard = {
         $(document).on('submit', '.display-widget-form ', function(event) {
             event.preventDefault();
 
-            Dashboard.setWidgetFromForm($(this));
+            that.setWidgetFromForm($(this));
         });
 
         // add new filter
         $(document).on("click", "#dashboard-"+options.rand+" .filters_toolbar .add-filter", function() {
             glpi_close_all_dialogs();
 
-            var filters = Dashboard.getFiltersFromDB();
+            var filters = that.getFiltersFromDB();
             var filter_names    = Object.keys(filters);
 
             glpi_ajax_dialog({
@@ -368,6 +392,7 @@ var Dashboard = {
                 url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
                 params: {
                     action: 'display_add_filter',
+                    dashboard: that.current_name,
                     used: filter_names
                 },
             });
@@ -379,7 +404,7 @@ var Dashboard = {
 
             var form = $(this);
 
-            Dashboard.setFilterFromForm(form);
+            that.setFilterFromForm(form);
         });
 
         // delete existing filter
@@ -391,19 +416,19 @@ var Dashboard = {
             filter.remove();
 
             // remove filter from storage and refresh cards
-            var filters = Dashboard.getFiltersFromDB();
+            var filters = that.getFiltersFromDB();
             delete filters[filter_id];
-            Dashboard.setFiltersInDB(filters);
-            Dashboard.refreshCardsImpactedByFilter(filter_id);
+            that.setFiltersInDB(filters);
+            that.refreshCardsImpactedByFilter(filter_id);
         });
 
         // rename dashboard
         $(document).on('click', '.save-dashboard-name ', function(event) {
             event.preventDefault();
             // change in selector
-            $('.dashboard_select option[value='+Dashboard.current_name+']')
+            $('.dashboard_select option[value='+that.current_name+']')
                 .text($(".dashboard-name").val());
-            Dashboard.saveDashboard();
+            that.saveDashboard();
 
             $('.display-message')
                 .addClass('success')
@@ -416,7 +441,7 @@ var Dashboard = {
             var select2_data      = event.params.data;
             var selected          = select2_data.id;
             var widgettype_field  = $(this).closest('.display-widget-form').find('.widgettype_field');
-            var available_widgets = Dashboard.all_cards[selected].widgettype;
+            var available_widgets = that.all_cards[selected].widgettype;
             var force_checked     = available_widgets.length === 1;
 
             widgettype_field
@@ -433,7 +458,7 @@ var Dashboard = {
         $(document).on('change', '.display-widget-form [name=widgettype]', function() {
             var widgetdom   = $(this);
             var widgettype  = widgetdom.val();
-            var widget      = Dashboard.all_widgets[widgettype];
+            var widget      = that.all_widgets[widgettype];
             var usegradient = widget.gradient || false;
             var pointlabels = widget.pointlbl || false;
             var uselimit    = widget.limit || false;
@@ -457,7 +482,7 @@ var Dashboard = {
 
         // markdown textarea edited
         $(document).on('input', '.card.markdown textarea.markdown_content', function() {
-            Dashboard.saveMarkdown($(this));
+            that.saveMarkdown($(this));
         });
 
         // FitText() add an event listener that recompute the font size of all
@@ -468,18 +493,22 @@ var Dashboard = {
             that.computeWidth($('body').find('.big-number').find('.formatted-number'));
             that.computeWidth($('body').find('.big-number').find('.label'));
         });
-    },
 
-    saveMarkdown:function(textarea) {
+        // Keep track of instance
+        Dashboard.dashboards[options.rand] = this;
+    }
+
+    saveMarkdown(textarea) {
         var item = textarea.closest('.grid-stack-item');
         var content = textarea.val();
         var gs_id = item.attr('gs-id');
 
         item.addClass('dirty');
-        Dashboard.markdown_contents[gs_id] = content;
-    },
+        this.markdown_contents[gs_id] = content;
+    }
 
-    setWidgetFromForm: function(form) {
+    setWidgetFromForm(form) {
+        const that = this;
 
         glpi_close_all_dialogs();
         var form_data  = {};
@@ -508,8 +537,10 @@ var Dashboard = {
         form_data.card_options.limit        = form_data.limit || 7;
 
         // specific case for markdown
-        if (form_data.card_id === "markdown_editable"
-      && !('markdown_content' in form_data.card_options)) {
+        if (
+            form_data.card_id === "markdown_editable"
+            && !('markdown_content' in form_data.card_options)
+        ) {
             form_data.card_options.markdown_content = "";
         }
 
@@ -519,7 +550,7 @@ var Dashboard = {
                 return false;
             }
             var item = $('.grid-stack-item[gs-id='+form_data.old_id+']')[0];
-            Dashboard.grid.removeWidget(item);
+            this.grid.removeWidget(item);
         }
 
         // complete ajax data
@@ -530,31 +561,32 @@ var Dashboard = {
 
         var args = form_data.card_options;
         args.force = true;
+        args.apply_filters = this.getFiltersFromDB();
 
         // add the new widget
-        var widget = Dashboard.addWidget(form_data);
+        var widget = this.addWidget(form_data);
 
         // get the html of the new card and save dashboard
         $.get({
             url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
             data: {
                 action:    'get_card',
-                dashboard: Dashboard.current_name,
+                dashboard: this.current_name,
                 card_id:   form_data.card_id,
-                cache_key: Dashboard.cache_key,
+                cache_key: this.cache_key,
                 args:      args,
             }
         }).done(function(card_html) {
             widget
                 .children('.grid-stack-item-content')
                 .append(card_html);
-            Dashboard.fitNumbers(widget);
-            Dashboard.animateNumbers(widget);
-            Dashboard.saveDashboard();
+            that.fitNumbers(widget);
+            that.animateNumbers(widget);
+            that.saveDashboard();
         });
-    },
+    }
 
-    addWidget: function(p) {
+    addWidget(p) {
         var gridstack_id = p.gridstack_id;
         var x            = parseInt(p.x || -1);
         var y            = parseInt(p.y || -1);
@@ -574,7 +606,7 @@ var Dashboard = {
       </div>';
 
         // add the widget to the grid
-        var widget = Dashboard.grid.addWidget(html, {
+        var widget = this.grid.addWidget(html, {
             'x': x,
             'y': y,
             'w': width,
@@ -587,9 +619,11 @@ var Dashboard = {
         $(widget).attr('data-card-options', JSON.stringify(options));
 
         return $(widget);
-    },
+    }
 
-    setFilterFromForm: function(form) {
+    setFilterFromForm(form) {
+        const that = this;
+
         glpi_close_all_dialogs();
         var form_data  = {};
 
@@ -605,80 +639,87 @@ var Dashboard = {
                 filter_id: form_data.filter_id,
             }
         }).done(function(filter_html) {
-            $('.filters').append(filter_html);
-            Dashboard.saveFilter(form_data.filter_id, []);
+            $(that.filters_selector).append(filter_html);
+            that.saveFilter(form_data.filter_id, []);
         });
-    },
+    }
 
-    refreshDashboard: function() {
-        var gridstack = $(Dashboard.elem_id+" .grid-stack");
-        Dashboard.grid.removeAll();
+    refreshDashboard() {
+        const that = this;
+        var gridstack = $(this.elem_id+" .grid-stack");
+        this.grid.removeAll();
+
+        let data = {
+            dashboard: this.current_name,
+            action: 'get_dashboard_items',
+        };
+        if (this.embed) {
+            data.embed        = 1;
+            data.token        = this.token;
+            data.entities_id  = this.entities_id;
+            data.is_recursive = this.is_recursive;
+        }
 
         $.get({
             url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
-            data: {
-                dashboard: Dashboard.current_name,
-                action: 'get_dashboard_items',
-                embed: (Dashboard.embed ? 1 : 0),
-            }
+            data: data
         }).done(function(html) {
             gridstack.prepend(html);
             gridstack.find('.grid-stack-item').each(function() {
-                Dashboard.grid.makeWidget($(this)[0]);
+                that.grid.makeWidget($(this)[0]);
             });
-
-            if (Dashboard.ajax_cards) {
-                Dashboard.getCardsAjax();
-            }
+            that.getCardsAjax();
         });
-    },
+    }
 
-    setLastDashboard: function() {
+    setLastDashboard() {
         $.post({
             url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
             data: {
-                dashboard: Dashboard.current_name,
+                dashboard: this.current_name,
                 page: (location.origin+location.pathname)
                     .replace(CFG_GLPI.url_base, ''),
                 action: 'set_last_dashboard',
             }
         });
-    },
+    }
 
-    saveFilter: function(filter_id, value) {
+    saveFilter(filter_id, value) {
         // store current filter in localStorage
-        var filters = Dashboard.getFiltersFromDB();
+        var filters = this.getFiltersFromDB();
         filters[filter_id] = value;
-        Dashboard.setFiltersInDB(filters);
+        this.setFiltersInDB(filters);
 
         // refresh sortable
-        sortable('.filters', 'reload');
+        sortable(this.filters_selector, 'reload');
 
         // refresh all card impacted by the changed filter
-        Dashboard.refreshCardsImpactedByFilter(filter_id);
-    },
+        this.refreshCardsImpactedByFilter(filter_id);
+    }
 
-    refreshCardsImpactedByFilter: function(filter_id) {
+    refreshCardsImpactedByFilter(filter_id) {
+        const that = this;
         $('.dashboard .card.filter-'+filter_id).each(function () {
             var gridstack_item = $(this).closest(".grid-stack-item");
             var card_id = gridstack_item.attr('gs-id');
-            Dashboard.getCardsAjax("[gs-id="+card_id+"]");
+            that.getCardsAjax("[gs-id="+card_id+"]");
         });
-    },
+    }
 
-    saveDashboard: function(force_refresh) {
+    saveDashboard(force_refresh) {
+        const that = this;
         force_refresh = force_refresh | false;
 
         var serializedData = $.makeArray(
-            Dashboard.element.find('.grid-stack-item:visible:not(.grid-stack-placeholder)')
+            this.element.find('.grid-stack-item:visible:not(.grid-stack-placeholder)')
         ) .map(function (v) {
             var gs_id = $(v).attr('gs-id');
             var options = $(v).data('card-options');
 
             // replace markdown content (this to avoid unwanted slashing)
-            if (_.keys(Dashboard.markdown_contents).length > 0
-             && gs_id in Dashboard.markdown_contents) {
-                options.markdown_content = Dashboard.markdown_contents[gs_id];
+            if (_.keys(that.markdown_contents).length > 0
+             && gs_id in that.markdown_contents) {
+                options.markdown_content = that.markdown_contents[gs_id];
             }
 
             return gs_id ? {
@@ -696,18 +737,16 @@ var Dashboard = {
             url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
             data: {
                 action: 'save_items',
-                dashboard: Dashboard.current_name,
+                dashboard: this.current_name,
                 items: serializedData,
                 title: $(".dashboard-name").val()
             }
         }).done(function() {
             if (force_refresh) {
-                Dashboard.refreshDashboard();
+                that.refreshDashboard();
             }
         });
-    },
-
-
+    }
 
     /**
     * FitText() only use the width of an item into consideration (and ignore the height).
@@ -720,7 +759,7 @@ var Dashboard = {
     *
     * @param {*} items
     */
-    computeWidth: function(items) {
+    computeWidth(items) {
         items.each(function() {
             // Compute parent dimension
             var parent_width = $(this).parent().parent().width();
@@ -747,7 +786,7 @@ var Dashboard = {
                 $(this).css('width', desired_width_percent_half + '%');
             }
         });
-    },
+    }
 
     /**
     * Remove the custom width as it should only be used temporarily to 'trick'
@@ -756,13 +795,13 @@ var Dashboard = {
     *
     * @param {*} items
     */
-    resetComputedWidth: function(items) {
+    resetComputedWidth(items) {
         items.each(function() {
             $(this).css('width', '100%');
         });
-    },
+    }
 
-    fitNumbers: function(parent_item) {
+    fitNumbers(parent_item) {
         parent_item = parent_item || $('body');
 
         var text_offset = 1.16;
@@ -796,10 +835,9 @@ var Dashboard = {
         // Remove temporary width
         this.resetComputedWidth(parent_item.find('.big-number').find('.formatted-number'));
         this.resetComputedWidth(parent_item.find('.big-number').find('.label'));
+    }
 
-    },
-
-    animateNumbers: function(parent_item) {
+    animateNumbers(parent_item) {
         parent_item = parent_item || $('body');
 
         parent_item
@@ -809,7 +847,6 @@ var Dashboard = {
                 var count        = $(this);
                 var precision    = count.data('precision');
                 var number       = count.children('.number');
-                var suffix       = count.children('.suffix').text();
                 var targetNumber = number.text();
 
                 // Some custom formats may contain text in the number field, no animation in this case
@@ -821,108 +858,113 @@ var Dashboard = {
                     duration: 800,
                     easing: 'swing',
                     step: function () {
-                        number.text(this.Counter.toFixed(precision))+suffix;
+                        number.text(this.Counter.toFixed(precision));
                     },
                     complete: function () {
-                        number.text(targetNumber)+suffix;
+                        number.text(targetNumber);
                     }
                 });
             });
-    },
+    }
 
-    setEditMode: function(activate) {
-        Dashboard.edit_mode = typeof activate == "undefined" ? true : activate;
+    setEditMode(activate) {
+        this.edit_mode = typeof activate == "undefined" ? true : activate;
 
-        var edit_ctrl = $(Dashboard.elem_id+" .toolbar .edit-dashboard");
+        var edit_ctrl = $(this.elem_id+" .toolbar .edit-dashboard");
         edit_ctrl.toggleClass('active', activate);
-        Dashboard.element.toggleClass('edit-mode', activate);
-        Dashboard.grid.setStatic(!activate);
+        this.element.toggleClass('edit-mode', activate);
+        this.grid.setStatic(!activate);
 
         // set filters as sortable (draggable) or not
-        sortable('.filters', activate ? 'enable' : 'disable');
+        if ($(this.filters_selector).children().length > 0) {
+            sortable(this.filters_selector, activate ? 'enable' : 'disable');
+        }
 
-        if (!Dashboard.edit_mode) {
+        if (!this.edit_mode) {
             // save markdown textareas set as dirty
             var dirty_textareas = $(".grid-stack-item.dirty");
             if (dirty_textareas.length > 0) {
-                Dashboard.saveDashboard(true);
+                this.saveDashboard(true);
             }
         }
-    },
+    }
 
-    toggleFullscreenMode: function(fs_ctrl) {
+    toggleFullscreenMode(fs_ctrl) {
         var fs_enabled = !fs_ctrl.hasClass('active');
 
-        Dashboard.element.toggleClass('fullscreen')
+        this.element.toggleClass('fullscreen')
             .find('.night-mode').toggle(fs_enabled);
         fs_ctrl.toggleClass('active');
 
         // desactivate edit mode
         if (fs_enabled) {
-            Dashboard.setEditMode(false);
+            this.setEditMode(false);
         }
 
         // fullscreen browser api
         if (fs_enabled) {
-            GoInFullscreen(Dashboard.elem_dom);
+            GoInFullscreen(this.elem_dom);
         } else {
             GoOutFullscreen();
         }
-    },
+    }
 
-    disableFullscreenMode: function() {
-        Dashboard.element
+    disableFullscreenMode() {
+        this.element
             .removeClass('fullscreen')
             .find('.night-mode').hide().end()
             .find('.toggle-fullscreen').removeClass('active');
 
         GoOutFullscreen();
-    },
+    }
 
     /**
     * Clone current dashboard
     * (clean all previous gridstack_id in cards)
     */
-    clone: function() {
+    clone() {
+        const that = this;
+
         $.post({
             url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
             data: {
-                dashboard: Dashboard.current_name,
+                dashboard: this.current_name,
                 action: 'clone_dashboard',
             },
             dataType: 'json'
         }).done(function(new_dash) {
-            Dashboard.addNewDashbardInSelect(new_dash.title, new_dash.key);
+            that.addNewDashbardInSelect(new_dash.title, new_dash.key);
         });
-    },
+    }
 
     /**
     * Delete current dashboard
     */
-    delete: function() {
+    delete() {
+        const that = this;
         var confirm_msg = __("Are you sure you want to delete the dashboard %s ?")
-            .replace('%s', Dashboard.current_name);
+            .replace('%s', this.current_name);
         if (window.confirm(confirm_msg, __("Delete this dashboard"))) {
             $.post({
                 url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
                 data: {
                     action: 'delete_dashboard',
-                    dashboard: Dashboard.current_name,
+                    dashboard: this.current_name,
                 }
             }).done(function() {
-                $("#dashboard-"+Dashboard.rand+" .toolbar .dashboard_select")
-                    .find("option[value='"+Dashboard.current_name+"']").remove()
+                $("#dashboard-"+that.rand+" .toolbar .dashboard_select")
+                    .find("option[value='"+that.current_name+"']").remove()
                     .end() // reset find filtering
                     .prop("selectedIndex", 0)
                     .trigger('change');
             });
         }
-    },
+    }
 
     /**
     * Display form to add a new dashboard
     */
-    addForm: function() {
+    addForm() {
         glpi_ajax_dialog({
             title: __("Add a new dashboard"),
             url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
@@ -930,40 +972,45 @@ var Dashboard = {
                 action: 'add_new',
             }
         });
-    },
+    }
 
-    addNew: function(form_data) {
+    addNew(form_data) {
+        const that = this;
+
         $.post({
             url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
             data: {
                 action: 'save_new_dashboard',
                 title: form_data.title,
-                context: Dashboard.context,
+                context: this.context,
             }
         }).done(function(dashboard_key) {
-            Dashboard.addNewDashbardInSelect(form_data.title, dashboard_key);
-            Dashboard.setEditMode(true);
+            that.addNewDashbardInSelect(form_data.title, dashboard_key);
+            that.setEditMode(true);
         });
-    },
+    }
 
     /**
     * Add a new option to top left dashboard select
     */
-    addNewDashbardInSelect: function(label, value) {
+    addNewDashbardInSelect(label, value) {
         var newOption = new Option(label, value, false, true);
-        $("#dashboard-"+Dashboard.rand+" .toolbar .dashboard_select")
+        $("#dashboard-"+this.rand+" .toolbar .dashboard_select")
             .append(newOption)
             .trigger('change');
-    },
+    }
 
-    getCardsAjax: function(specific_one) {
+    getCardsAjax(specific_one) {
+        const that = this;
+
         specific_one = specific_one || "";
 
-        var filters = Dashboard.getFiltersFromDB();
+        const filters = this.getFiltersFromDB();
+        const force = (specific_one.length > 0 ? 1 : 0);
 
         let requested_cards = [];
         let card_ajax_data = [];
-        $(".grid-stack-item:not(.lock-bottom)"+specific_one).each(function() {
+        $(this.elem_dom).find(".grid-stack-item:not(.lock-bottom)"+specific_one).each(function() {
             var card         = $(this);
             var card_opt     = card.data('card-options');
             var gridstack_id = card.attr('gs-id');
@@ -973,7 +1020,7 @@ var Dashboard = {
 
             // store markdown after card reload
             if ("markdown_content" in card_opt) {
-                Dashboard.markdown_contents[gridstack_id] = card_opt.markdown_content;
+                that.markdown_contents[gridstack_id] = card_opt.markdown_content;
             }
 
             // append filters
@@ -981,57 +1028,101 @@ var Dashboard = {
 
             card_ajax_data.push({
                 'card_id': card_id,
-                'force': (specific_one.length > 0 ? 1 : 0),
+                'force': force,
                 'args': card_opt,
                 'c_cache_key': card_opt.cache_key || ""
             });
             requested_cards.push({
                 'card_el': card,
-                'card_id': card_id
+                'card_id': card_id,
+                'args': card_opt,
             });
         });
 
-        return $.ajax({
-            url:CFG_GLPI.root_doc+"/ajax/dashboard.php",
-            method: 'POST',
-            data: {
-                'action': 'get_cards',
-                data: JSON.stringify({ //Preserve integers
-                    'dashboard': Dashboard.current_name,
-                    'force': (specific_one.length > 0 ? 1 : 0),
-                    'embed': (Dashboard.embed ? 1 : 0),
-                    'd_cache_key': Dashboard.cache_key,
-                    'cards': card_ajax_data
-                })
-            }
-        }).then(function(results) {
-            $.each(requested_cards, (i2, crd) => {
-                let has_result = false;
-                const card = crd.card_el;
-                $.each(results, (card_id, card_result) => {
-                    if (crd.card_id === card_id) {
-                        const html = card_result;
-                        has_result = true;
-                        card.children('.grid-stack-item-content').html(html);
+        if (this.ajax_cards) {
+            // Multi ajax mode, spawn a request for each card
+            const promises = [];
+            requested_cards.forEach(function(requested_card) {
+                const card = requested_card.card_el;
 
-                        Dashboard.fitNumbers(card);
-                        Dashboard.animateNumbers(card);
+                let data = {
+                    'action':      'get_card',
+                    'dashboard':   that.current_name,
+                    'card_id':     requested_card.card_id,
+                    'force':       force,
+                    'args':        requested_card.args,
+                    'd_cache_key': that.cache_key,
+                    'c_cache_key': requested_card.args.cache_key || ""
+                };
+                if (that.embed) {
+                    data.embed        = 1;
+                    data.token        = that.token;
+                    data.entities_id  = that.entities_id;
+                    data.is_recursive = that.is_recursive;
+                }
+
+                promises.push($.get(CFG_GLPI.root_doc+"/ajax/dashboard.php", data).then(function(html) {
+                    card.children('.grid-stack-item-content').html(html);
+
+                    that.fitNumbers(card);
+                    that.animateNumbers(card);
+                }).fail(function() {
+                    card.html("<div class='empty-card card-error'><i class='fas fa-exclamation-triangle'></i></div>");
+                }));
+            });
+
+            return promises;
+        } else {
+            // Single ajax mode, spawn a single request
+            let data = {
+                'dashboard': this.current_name,
+                'force': (specific_one.length > 0 ? 1 : 0),
+                'd_cache_key': this.cache_key,
+                'cards': card_ajax_data
+            };
+            if (this.embed) {
+                data.embed        = 1;
+                data.token        = this.token;
+                data.entities_id  = this.entities_id;
+                data.is_recursive = this.is_recursive;
+            }
+
+            return $.ajax({
+                url:CFG_GLPI.root_doc+"/ajax/dashboard.php",
+                method: 'POST',
+                data: {
+                    'action': 'get_cards',
+                    data: JSON.stringify(data)
+                }
+            }).then(function(results) {
+                $.each(requested_cards, (i2, crd) => {
+                    let has_result = false;
+                    const card = crd.card_el;
+                    $.each(results, (card_id, card_result) => {
+                        if (crd.card_id === card_id) {
+                            const html = card_result;
+                            has_result = true;
+                            card.children('.grid-stack-item-content').html(html);
+
+                            that.fitNumbers(card);
+                            that.animateNumbers(card);
+                        }
+                    });
+                    if (!has_result) {
+                        card.html("<div class='empty-card card-error'><i class='fas fa-exclamation-triangle'></i></div>");
                     }
                 });
-                if (!has_result) {
+            }).fail(function() {
+                $.each(requested_cards, (i2, crd) => {
+                    const card = crd.card_el;
                     card.html("<div class='empty-card card-error'><i class='fas fa-exclamation-triangle'></i></div>");
-                }
+                });
             });
-        }).fail(function() {
-            $.each(requested_cards, (i2, crd) => {
-                const card = crd.card_el;
-                card.html("<div class='empty-card card-error'><i class='fas fa-exclamation-triangle'></i></div>");
-            });
-        });
-    },
+        }
+    }
 
-    easter: function() {
-        var items = $(Dashboard.elem_id+" .grid-stack .grid-stack-item .card");
+    easter() {
+        var items = $(this.elem_id+" .grid-stack .grid-stack-item .card");
 
         setInterval(function() {
             var color = "#"+((1<<24)*Math.random()|0).toString(16);
@@ -1039,11 +1130,11 @@ var Dashboard = {
             var item = items[no_item];
             $(item).css('background-color', color);
         }, 10);
-    },
+    }
 
-    generateCss: function() {
+    generateCss() {
         var dash_width    = Math.floor(this.element.width());
-        var cell_length   = dash_width / this.cols;
+        var cell_length   = (dash_width - 1) / this.cols;
         var cell_height   = cell_length;
         var cell_fullsize = (dash_width / this.cols);
         var width_percent = 100 / this.cols;
@@ -1086,17 +1177,19 @@ var Dashboard = {
 
         // apply new height to gridstack
         this.grid.cellHeight(cell_height);
-    },
+    }
 
     /**
     * init filters of the dashboard
     */
-    initFilters: function() {
-        if ($(".filters").length === 0) {
+    initFilters() {
+        const that = this;
+
+        if ($(this.filters_selector).length === 0) {
             return;
         }
 
-        var filters = Dashboard.getFiltersFromDB();
+        var filters = this.getFiltersFromDB();
 
         // replace empty array by empty string to avoid jquery remove the corresponding key
         // when sending ajax query
@@ -1114,36 +1207,35 @@ var Dashboard = {
                 "filters": filters,
             }
         }).done(function(html) {
-            $('.filters').html(html);
-
+            $(that.filters_selector).html(html);
             // we must  emit an event to all filters to say them dashboard is ready
             $(document).trigger("glpiDasbhoardInitFilter");
 
             // start sortable on filter but disable it by default,
             // we will enable it when edit mode will be toggled on
-            sortable('.filters', {
+            sortable(that.filters_selector, {
                 placeholderClass: 'filter-placeholder',
                 orientation: 'horizontal',
             })[0].addEventListener('sortupdate', function(e) {
             // after drag, save the order of filters in storage
-                var items_after = $(e.detail.destination.items).filter('.filter');
-                var filters     = Dashboard.getFiltersFromDB();
+                var items_after = $(e.detail.destination.items).filter(that.filters_selector);
+                var filters     = that.getFiltersFromDB();
                 var new_filters = {};
                 $.each(items_after, function() {
                     var filter_id = $(this).data('filter-id');
                     new_filters[filter_id] = filters[filter_id];
                 });
 
-                Dashboard.setFiltersInDB(new_filters);
+                that.setFiltersInDB(new_filters);
             });
-            sortable('.filters', 'disable');
+            sortable(that.filters_selector, 'disable');
         });
-    },
+    }
 
     /**
     * Return saved filter from server side database
     */
-    getFiltersFromDB: function() {
+    getFiltersFromDB() {
         var filters;
         $.ajax({
             method: 'GET',
@@ -1151,7 +1243,7 @@ var Dashboard = {
             async: false,
             data: {
                 action:    'get_filter_data',
-                dashboard: Dashboard.current_name,
+                dashboard: this.current_name,
             }
         }).done(function(response) {
             try {
@@ -1160,31 +1252,29 @@ var Dashboard = {
                 filters = JSON.parse('{}');
             }
         });
-        return filters;
-    },
+        return filters || {};
+    }
 
     /**
     * Save an object of filters for the current dashboard into serverside database
     *
     * @param {Object} sub_filters
     */
-    setFiltersInDB: function(sub_filters) {
+    setFiltersInDB(sub_filters) {
         var filters = [];
-        if (Dashboard.current_name.length > 0) {
-            filters[Dashboard.current_name] = sub_filters;
+        if (this.current_name.length > 0) {
+            filters[this.current_name] = sub_filters;
         }
         $.ajax({
             method: 'POST',
             url: CFG_GLPI.root_doc+"/ajax/dashboard.php",
             data: {
                 action:    'save_filter_data',
-                dashboard: Dashboard.current_name,
-                filters:   JSON.stringify(filters[Dashboard.current_name], function(k, v) {
+                dashboard: this.current_name,
+                filters:   JSON.stringify(filters[this.current_name], function(k, v) {
                     return v === undefined ? null : v;
                 }),
             }
         });
-
-    },
-
-};
+    }
+}

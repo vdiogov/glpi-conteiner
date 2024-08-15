@@ -3,7 +3,7 @@
 The present file will list all changes made to the project; according to the
 [Keep a Changelog](http://keepachangelog.com/) project.
 
-## [10.0.3] unreleased
+## [10.0.16] unreleased
 
 ### Added
 
@@ -17,11 +17,259 @@ The present file will list all changes made to the project; according to the
 
 #### Added
 
-- `CommonDBTM::pre_addToDB()` added.
+#### Changes
+
+#### Deprecated
+
+#### Removed
+
+
+## [10.0.15] 2024-04-24
+
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### API changes
+
+#### Added
 
 #### Changes
 
 #### Deprecated
+
+#### Removed
+
+
+## [10.0.14] 2024-03-14
+
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### API changes
+
+#### Added
+
+#### Changes
+
+#### Deprecated
+
+#### Removed
+
+
+## [10.0.13] 2024-03-13
+
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### API changes
+
+#### Added
+
+#### Changes
+- `condition` and `displaywith` parameters must now be added in IDOR token creation data when they are not empty.
+
+#### Deprecated
+
+#### Removed
+
+
+## [10.0.12] 2024-02-01
+
+### Added
+
+### Changed
+- Permissions for historical data and system logs (Administration > Logs) are now managed by "Historical (READ)" and "System Logs (READ)" respectively.
+
+### Deprecated
+
+### Removed
+
+### API changes
+
+#### Added
+
+#### Changes
+
+#### Deprecated
+- `Entity::cleanEntitySelectorCache()` no longer has any effect as the entity selector is no longer cached as a unique entry
+
+#### Removed
+
+
+## [10.0.11] 2023-12-13
+
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### API changes
+
+#### Added
+
+#### Changes
+
+#### Deprecated
+- Usage of the `DBmysql::query()` method is deprecated, for security reasons, as it is most of the time used in an insecure way.
+  To execute DB queries, either `DBmysql::request()` can be used to craft query using the GLPI query builder,
+  either `DBmysql::doQuery()` can be used for safe queries to execute DB query using a self-crafted SQL string.
+  This deprecation will not trigger any error, unless the `GLPI_STRICT_DEPRECATED` constant is set to `true`, to avoid
+  cluttering error logs.
+
+#### Removed
+
+
+## [10.0.10] 2023-09-25
+
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### API changes
+
+#### Added
+
+#### Changes
+
+#### Deprecated
+
+#### Removed
+
+
+## [10.0.9] 2023-07-11
+
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### API changes
+
+#### Added
+
+#### Changes
+
+#### Deprecated
+
+#### Removed
+
+
+## [10.0.8] 2023-07-05
+
+### Added
+- Unified Debug bar feature has been added to display debug information in the browser as a replacement and expansion on the previous, individual debug panels.
+
+### Changed
+
+### Deprecated
+
+### Removed
+- Debug panels and the toggle button to show/hide the primary debug panel that was next to the current user's name in the top right corner of the screen have been removed.
+- `debug_tabs` plugin hook
+
+### API changes
+
+#### Added
+- `CommonDBTM::getMessageReferenceEvent()` method that can be overridden to tweak notifications grouping in mail clients.
+
+#### Changes
+
+#### Deprecated
+- `Html::displayDebugInfo()` method no longer has any effect. The functionality was replaced by the new Debug Bar feature.
+- `Hooks::DEBUG_TABS`
+- `$TIMER_DEBUG` global variable.
+- `$DEBUG_SQL` global variable.
+- `$SQL_TOTAL_REQUEST` global variable.
+- `$DEBUG_SQL` global variable.
+- `$CFG_GLPI['debug_sql']` configuration option.
+- `$CFG_GLPI['debug_vars']` configuration option.
+
+- Usage of parameter `$clean` in `AuthLDAP::getObjectByDn()` and `AuthLDAP::getUserByDn()`.
+
+#### Removed
+
+
+## [10.0.7] 2023-04-05
+
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### API changes
+
+#### Added
+
+#### Changes
+- Itemtype that can be linked to a disk are now declared in `$CFG_GLPI['disk_types']`.
+
+#### Deprecated
+- `Glpi\Inventory\Conf::importFile()`
+- `RSSFeed::showDiscoveredFeeds()`
+- `Toolbox::checkValidReferer()`
+
+#### Removed
+
+## [10.0.6] 2023-01-24
+
+### Added
+
+### Changed
+- `glpi:` command prefix has been removed from console commands canonical name.
+
+### Deprecated
+
+### Removed
+
+### API changes
+
+#### Added
+
+#### Changes
+
+#### Deprecated
+
+#### Removed
+
+## [10.0.5] 2022-11-04
+
+## [10.0.4] 2022-11-03
+
+## [10.0.3] 2022-09-14
+
+### API changes
+
+#### Added
+
+- `CommonDBTM::pre_addToDB()` added.
 
 #### Removed
 

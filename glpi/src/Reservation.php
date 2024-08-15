@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -32,6 +32,8 @@
  *
  * ---------------------------------------------------------------------
  */
+
+use Glpi\Event;
 
 /**
  * Reservation Class
@@ -90,6 +92,7 @@ class Reservation extends CommonDBChild
 
     public function pre_deleteItem()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (
@@ -114,15 +117,9 @@ class Reservation extends CommonDBChild
      **/
     public function prepareInputForUpdate($input)
     {
-
-        $item = 0;
-        if (isset($input['_item'])) {
-            $item = $_POST['_item'];
-        }
-
-       // Save fields
+        // Save fields
         $oldfields             = $this->fields;
-       // Needed for test already planned
+        // Needed for test already planned
         if (isset($input["begin"])) {
             $this->fields["begin"] = $input["begin"];
         }
@@ -130,17 +127,11 @@ class Reservation extends CommonDBChild
             $this->fields["end"] = $input["end"];
         }
 
-        if (!$this->test_valid_date()) {
-            $this->displayError("date", $item);
+        if (!$this->isReservationInputValid($input)) {
             return false;
         }
 
-        if ($this->is_reserved()) {
-            $this->displayError("is_res", $item);
-            return false;
-        }
-
-       // Restore fields
+        // Restore fields
         $this->fields = $oldfields;
 
         return parent::prepareInputForUpdate($input);
@@ -150,8 +141,9 @@ class Reservation extends CommonDBChild
     /**
      * @see CommonDBTM::post_updateItem()
      **/
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (
@@ -173,7 +165,6 @@ class Reservation extends CommonDBChild
      **/
     public function prepareInputForAdd($input)
     {
-
        // Error on previous added reservation on several add
         if (isset($input['_ok']) && !$input['_ok']) {
             return false;
@@ -181,25 +172,134 @@ class Reservation extends CommonDBChild
 
        // set new date.
         $this->fields["reservationitems_id"] = $input["reservationitems_id"];
-        $this->fields["begin"]               = $input["begin"];
-        $this->fields["end"]                 = $input["end"];
+        $this->fields["begin"] = $input["begin"];
+        $this->fields["end"] = $input["end"];
 
-        if (!$this->test_valid_date()) {
-            $this->displayError("date", $input["reservationitems_id"]);
-            return false;
-        }
-
-        if ($this->is_reserved()) {
-            $this->displayError("is_res", $input["reservationitems_id"]);
+        if (!$this->isReservationInputValid($input)) {
             return false;
         }
 
         return parent::prepareInputForAdd($input);
     }
 
+    public static function handleAddForm(array $input): void
+    {
+        if (empty($input['users_id'])) {
+            $input['users_id'] = Session::getLoginUserID();
+        }
+        if (!Session::haveRight("reservation", ReservationItem::RESERVEANITEM)) {
+            return;
+        }
+
+        Toolbox::manageBeginAndEndPlanDates($input['resa']);
+        if (!isset($input['resa']["begin"]) || !isset($input['resa']["end"])) {
+            return;
+        }
+
+        if (!isset($input['items']) || !is_array($input['items']) || count($input['items']) === 0) {
+            Session::addMessageAfterRedirect(
+                __('No selected items'),
+                false,
+                ERROR
+            );
+        }
+
+        $dates_to_add = [];
+        $dates_to_add[$input['resa']["begin"]] = $input['resa']["end"];
+        if (
+            isset($input['periodicity'])
+            && isset($input['periodicity']['type'])
+            && !empty($input['periodicity']['type'])
+        ) {
+            $dates_to_add += Reservation::computePeriodicities(
+                $input['resa']["begin"],
+                $input['resa']["end"],
+                $input['periodicity']
+            );
+        }
+        ksort($dates_to_add);
+
+        foreach ($input['items'] as $reservationitems_id) {
+            $rr = new self();
+            $group = (count($dates_to_add) > 1) ? $rr->getUniqueGroupFor($reservationitems_id) : null;
+
+            foreach ($dates_to_add as $begin => $end) {
+                $reservation_input = [
+                    'begin' => $begin,
+                    'end' => $end,
+                    'reservationitems_id' => $reservationitems_id,
+                    'comment' => $input['comment'],
+                    'users_id' => (int)$input['users_id'],
+                ];
+                if (count($dates_to_add) > 1) {
+                    $reservation_input['group'] = $group;
+                }
+
+                if ($newID = $rr->add($reservation_input)) {
+                    Event::log(
+                        $newID,
+                        "reservation",
+                        4,
+                        "inventory",
+                        sprintf(
+                            __('%1$s adds the reservation %2$s for item %3$s'),
+                            $_SESSION["glpiname"],
+                            $newID,
+                            $reservationitems_id
+                        )
+                    );
+
+                    $rri = new ReservationItem();
+                    $rri->getFromDB($reservationitems_id);
+                    $item = new $rri->fields["itemtype"]();
+                    $item->getFromDB($rri->fields["items_id"]);
+
+                    Session::addMessageAfterRedirect(
+                        sprintf(
+                            __('Reservation added for item %s at %s'),
+                            $item->getLink(),
+                            Html::convDateTime($reservation_input['begin'])
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Check reservation input.
+     *
+     * @param array $input
+     *
+     * @return bool
+     */
+    private function isReservationInputValid(array $input): bool
+    {
+        if (!$this->test_valid_date()) {
+            Session::addMessageAfterRedirect(
+                __('Error in entering dates. The starting date is later than the ending date'),
+                false,
+                ERROR
+            );
+            return false;
+        }
+
+        if ($this->is_reserved()) {
+            Session::addMessageAfterRedirect(
+                __('The required item is already reserved for this timeframe'),
+                false,
+                ERROR
+            );
+            return false;
+        }
+
+        return true;
+    }
+
 
     public function post_addItem()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!isset($this->input['_disablenotif']) && $CFG_GLPI["use_notifications"]) {
@@ -217,6 +317,7 @@ class Reservation extends CommonDBChild
      **/
     public function getUniqueGroupFor($reservationitems_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         do {
@@ -244,6 +345,7 @@ class Reservation extends CommonDBChild
      **/
     public function is_reserved()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (
@@ -293,6 +395,8 @@ class Reservation extends CommonDBChild
      * @param $ID     ID of the item
      *
      * @return void
+     *
+     * @FIXME Deprecate/remove this method in GLPI 10.1.
      **/
     public function displayError($type, $ID)
     {
@@ -369,12 +473,13 @@ class Reservation extends CommonDBChild
             return false;
         }
 
-        return Session::haveAccessToEntity($item->getEntityID());
+        return Session::haveAccessToEntity($item->getEntityID(), $item->isRecursive());
     }
 
 
     public function post_purgeItem()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (isset($this->input['_delete_group']) && $this->input['_delete_group']) {
@@ -400,9 +505,10 @@ class Reservation extends CommonDBChild
      **/
     public static function showCalendar(int $ID = 0)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
-        if (!Session::haveRight("reservation", ReservationItem::RESERVEANITEM)) {
+        if (!Session::haveRightsOr("reservation", [READ, ReservationItem::RESERVEANITEM])) {
             return false;
         }
 
@@ -455,6 +561,11 @@ class Reservation extends CommonDBChild
         echo "<div id='reservations_planning_$rand' class='card-body reservations-planning'></div>";
         echo "</div>"; // .reservation_panel
 
+        $can_reserve = (
+            Session::haveRight("reservation", ReservationItem::RESERVEANITEM)
+            && count(self::getReservableItemtypes()) > 0
+        ) ? "true" : "false";
+        $now = date("Y-m-d H:i:s");
         $js = <<<JAVASCRIPT
       $(function() {
          var reservation = new Reservations();
@@ -463,6 +574,8 @@ class Reservation extends CommonDBChild
             is_all: $is_all,
             rand: $rand,
             license_key: '$scheduler_key',
+            can_reserve: $can_reserve,
+            now: '$now',
          });
          reservation.displayPlanning();
       });
@@ -473,6 +586,7 @@ JAVASCRIPT;
 
     public static function getEvents(array $params): array
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $defaults = [
@@ -488,9 +602,9 @@ JAVASCRIPT;
         $res_table   = static::getTable();
         $res_i_table = ReservationItem::getTable();
 
-        $canedit_admin = Session::getCurrentInterface() == "central"
-                       && Session::haveRight("reservation", READ);
-        $can_reserve   = Session::haveRight("reservation", ReservationItem::RESERVEANITEM);
+        $can_read    = Session::haveRight("reservation", READ);
+        $can_edit    = Session::getCurrentInterface() == "central" && Session::haveRight("reservation", UPDATE);
+        $can_reserve = Session::haveRight("reservation", ReservationItem::RESERVEANITEM);
 
         $user = new User();
 
@@ -535,29 +649,29 @@ JAVASCRIPT;
             if (!$item->getFromDB($data['items_id'])) {
                 continue;
             }
+            if (!Session::haveAccessToEntity($item->getEntityID(), $item->isRecursive())) {
+                continue;
+            }
 
             $my_item = $data['users_id'] === Session::getLoginUserID();
 
-            if ($canedit_admin || $my_item) {
+            if ($can_read || $my_item) {
                 $user->getFromDB($data['users_id']);
-                $username = $user->getFriendlyName();
+                $data['comment'] .= '<br />' . sprintf(__("Reserved by %s"), $user->getFriendlyName());
             }
 
             $name = $item->getName([
                 'complete' => true,
             ]);
 
-            $editable = $canedit_admin || ($can_reserve && $my_item);
+            $editable = $can_edit || ($can_reserve && $my_item);
 
             $events[] = [
                 'id'          => $data['id'],
                 'resourceId'  => $data['itemtype'] . "-" . $data['items_id'],
                 'start'       => $data['begin'],
                 'end'         => $data['end'],
-                'comment'     => $data['comment'] .
-                             $canedit_admin || $my_item
-                              ? "\n" . sprintf(__("Reserved by %s"), $username)
-                              : "",
+                'comment'     => $can_read || $my_item ? $data['comment'] : '',
                 'title'       => $params['reservationitems_id'] ? "" : $name,
                 'icon'        => $item->getIcon(),
                 'description' => $item->getTypeName(),
@@ -576,6 +690,7 @@ JAVASCRIPT;
 
     public static function getResources()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $res_i_table = ReservationItem::getTable();
@@ -631,6 +746,8 @@ JAVASCRIPT;
             return false;
         }
 
+        $event = Planning::cleanDates($event);
+
         return $reservation->update([
             'id'    => (int) $event['id'],
             'begin' => date("Y-m-d H:i:s", strtotime($event['start'])),
@@ -649,6 +766,7 @@ JAVASCRIPT;
      **/
     public function showForm($ID, array $options = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!Session::haveRight("reservation", ReservationItem::RESERVEANITEM)) {
@@ -674,6 +792,7 @@ JAVASCRIPT;
             }
         } else {
             $resa->getEmpty();
+            $options = Planning::cleanDates($options);
             $resa->fields["begin"] = date("Y-m-d H:i:s", strtotime($options['begin']));
             if (!isset($options['end'])) {
                 $resa->fields["end"] = date("Y-m-d H:00:00", strtotime($resa->fields["begin"]) + HOUR_TIMESTAMP);
@@ -703,7 +822,7 @@ JAVASCRIPT;
            // only one id = 0, display an item dropdown
             Dropdown::showSelectItemFromItemtypes([
                 'items_id_name'   => 'items[]',
-                'itemtypes'       => $CFG_GLPI['reservation_types'],
+                'itemtypes'       => self::getReservableItemtypes(),
                 'entity_restrict' => Session::getActiveEntity(),
                 'checkright'      => false,
                 'ajax_page'       => $CFG_GLPI['root_doc'] . '/ajax/reservable_items.php'
@@ -773,7 +892,8 @@ JAVASCRIPT;
             'min'        => 0,
             'max'        => 24 * HOUR_TIMESTAMP,
             'value'      => $default_delay,
-            'emptylabel' => __('Specify an end date')
+            'emptylabel' => __('Specify an end date'),
+            'allow_max_change' => false
         ]);
         echo "<br><div id='date_end$rand'></div>";
         $params = [
@@ -911,17 +1031,20 @@ JAVASCRIPT;
                             $begin_hour = $begin_time - strtotime(date('Y-m-d', $begin_time));
                             $end_hour   = $end_time - strtotime(date('Y-m-d', $end_time));
                             foreach ($options['days'] as $day => $val) {
+                                $end_day = $day;
+                                //Check that the start and end times are different else set the end day at the next day
+                                if ($begin_hour == $end_hour) {
+                                    $end_day = date('l', strtotime($day . ' +1 day'));
+                                }
                                 $dates[] = ['begin' => strtotime("next $day", $begin_time) + $begin_hour,
-                                    'end'   => strtotime("next $day", $end_time) + $end_hour
+                                    'end'   => strtotime("next $end_day", $end_time) + $end_hour
                                 ];
                             }
                         }
                     }
-
                     foreach ($dates as $key => $val) {
                         $begin_time = $val['begin'];
                         $end_time   = $val['end'];
-
                         while ($begin_time < $repeat_end) {
                             $toadd[date('Y-m-d H:i:s', $begin_time)] = date('Y-m-d H:i:s', $end_time);
                             $begin_time = strtotime('+1 week', $begin_time);
@@ -981,7 +1104,6 @@ JAVASCRIPT;
                     break;
             }
         }
-
         return $toadd;
     }
 
@@ -1024,6 +1146,7 @@ JAVASCRIPT;
         if (isset($_REQUEST['defaultDate'])) {
             $defaultDate = $_REQUEST['defaultDate'];
         }
+        $now = date("Y-m-d H:i:s");
         $js = <<<JAVASCRIPT
       $(function() {
          var reservation = new Reservations();
@@ -1035,6 +1158,7 @@ JAVASCRIPT;
             currentv: 'listFull',
             defaultDate: '$defaultDate',
             license_key: '$scheduler_key',
+            now: '$now',
          });
          reservation.displayPlanning();
       });
@@ -1051,7 +1175,11 @@ JAVASCRIPT;
      **/
     public static function showForUser($ID)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $resaID = 0;
 
@@ -1198,6 +1326,7 @@ JAVASCRIPT;
                 echo "<td>" . Html::convDateTime($data["begin"]) . "</td>";
                 echo "<td>" . Html::convDateTime($data["end"]) . "</td>";
 
+                $item = null;
                 if ($ri->getFromDB($data["reservationitems_id"])) {
                     $link = "&nbsp;";
 
@@ -1210,23 +1339,42 @@ JAVASCRIPT;
                     echo "<td>" . $data['completename'] . "</td>";
                 } else {
                     echo "<td>&nbsp;</td>";
+                    echo "<td>&nbsp;</td>";
                 }
 
                 echo "<td>" . getUserName($data["users_id"]) . "</td>";
                 echo "<td>" . nl2br($data["comment"]) . "</td>";
                 echo "<td>";
-                list($annee, $mois, $jour) = explode("-", $data["begin"]);
-                echo "<a href='" . $item::getFormURLWithID($ri->fields['items_id']) .
-                 "&forcetab=Reservation$1&tab_params[defaultDate]={$data["begin"]}' " .
-                  "title=\"" . __s('See planning') . "\">";
-                echo "<i class='far fa-calendar-alt'></i>";
-                echo "<span class='sr-only'>" . __('See planning') . "</span>";
+                if ($item instanceof CommonDBTM) {
+                    list($annee, $mois, $jour) = explode("-", $data["begin"]);
+                    echo "<a href='" . $item::getFormURLWithID($ri->fields['items_id']) .
+                     "&forcetab=Reservation$1&tab_params[defaultDate]={$data["begin"]}' " .
+                      "title=\"" . __s('See planning') . "\">";
+                    echo "<i class='far fa-calendar-alt'></i>";
+                    echo "<span class='sr-only'>" . __('See planning') . "</span>";
+                }
                 echo "</td></tr>\n";
             }
         }
         echo "</table></div>\n";
     }
 
+    /**
+     * Get reservable itemtypes from GLPI config, filtering out itemtype with no
+     * reservable items
+     *
+     * @return array
+     */
+    public static function getReservableItemtypes(): array
+    {
+        /** @var array $CFG_GLPI */
+        global $CFG_GLPI;
+
+        return array_filter(
+            $CFG_GLPI['reservation_types'],
+            fn ($type) => ReservationItem::countAvailableItems($type) > 0
+        );
+    }
 
     public static function getIcon()
     {

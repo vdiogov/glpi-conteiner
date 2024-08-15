@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -117,6 +117,7 @@ class Phone extends CommonDBTM
         $this->addStandardTab('Reservation', $ong, $options);
         $this->addStandardTab('Domain_Item', $ong, $options);
         $this->addStandardTab('Appliance_Item', $ong, $options);
+        $this->addStandardTab('RuleMatchedLog', $ong, $options);
         $this->addStandardTab('Log', $ong, $options);
 
         return $ong;
@@ -133,24 +134,6 @@ class Phone extends CommonDBTM
         unset($input['withtemplate']);
 
         return $input;
-    }
-
-
-    public function cleanDBonPurge()
-    {
-
-        $this->deleteChildrenAndRelationsFromDb(
-            [
-                Computer_Item::class,
-                Item_Project::class,
-            ]
-        );
-
-        Item_Devices::cleanItemDeviceDBOnItemDelete(
-            $this->getType(),
-            $this->fields['id'],
-            (!empty($this->input['keep_devices']))
-        );
     }
 
 
@@ -178,11 +161,12 @@ class Phone extends CommonDBTM
     /**
      * Return the linked items (in computers_items)
      *
-     * @return an array of linked items  like array('Computer' => array(1,2), 'Printer' => array(5,6))
+     * @return array of linked items  like array('Computer' => array(1,2), 'Printer' => array(5,6))
      * @since 0.84.4
      **/
     public function getLinkedItems()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -307,7 +291,7 @@ class Phone extends CommonDBTM
             'table'              => $this->getTable(),
             'field'              => 'number_line',
             'name'               => _x('quantity', 'Number of lines'),
-            'datatype'           => 'string',
+            'datatype'           => 'integer',
         ];
 
         $tab[] = [
@@ -403,7 +387,7 @@ class Phone extends CommonDBTM
             'table'              => 'glpi_users',
             'field'              => 'name',
             'linkfield'          => 'users_id_tech',
-            'name'               => __('Technician in charge of the hardware'),
+            'name'               => __('Technician in charge'),
             'datatype'           => 'dropdown',
             'right'              => 'own_ticket'
         ];
@@ -413,7 +397,7 @@ class Phone extends CommonDBTM
             'table'              => 'glpi_groups',
             'field'              => 'completename',
             'linkfield'          => 'groups_id_tech',
-            'name'               => __('Group in charge of the hardware'),
+            'name'               => __('Group in charge'),
             'condition'          => ['is_assign' => 1],
             'datatype'           => 'dropdown'
         ];
@@ -471,9 +455,17 @@ class Phone extends CommonDBTM
             'massiveaction'      => false
         ];
 
+        $tab[] = [
+            'id'                 => '47',
+            'table'              => static::getTable(),
+            'field'              => 'uuid',
+            'name'               => __('UUID'),
+            'datatype'           => 'string',
+        ];
+
         $tab = array_merge($tab, Notepad::rawSearchOptionsToAdd());
 
-        $tab = array_merge($tab, Socket::rawSearchOptionsToAdd(get_class($this)));
+        $tab = array_merge($tab, Socket::rawSearchOptionsToAdd());
 
         return $tab;
     }
@@ -494,7 +486,7 @@ class Phone extends CommonDBTM
         ];
 
         $tab[] = [
-            'id'                 => '132',
+            'id'                 => '1432',
             'table'              => 'glpi_computers_items',
             'field'              => 'id',
             'name'               => _x('quantity', 'Number of phones'),

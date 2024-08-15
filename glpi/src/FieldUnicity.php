@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -158,6 +158,7 @@ class FieldUnicity extends CommonDropdown
      **/
     public function showItemtype($ID, $value = 0)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        //Criteria already added : only display the selected itemtype
@@ -203,6 +204,7 @@ class FieldUnicity extends CommonDropdown
      **/
     public static function getUnicityFieldsConfig($itemtype, $entities_id = 0, $check_active = true)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        //Get the first active configuration for this itemtype
@@ -277,6 +279,7 @@ class FieldUnicity extends CommonDropdown
      **/
     public static function dropdownFields($itemtype, $options = [])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $p = [
@@ -293,16 +296,12 @@ class FieldUnicity extends CommonDropdown
 
        //Search option for this type
         if ($target = getItemForItemtype($itemtype)) {
-           //Do not check unicity on fields in DB with theses types
-            $blacklisted_types = ['longtext', 'text'];
-
            //Construct list
             $values = [];
             foreach ($DB->listFields(getTableForItemType($itemtype)) as $field) {
                 $searchOption = $target->getSearchOptionByField('field', $field['Field']);
                 if (
                     !empty($searchOption)
-                    && !in_array($field['Type'], $blacklisted_types)
                     && !in_array($field['Field'], $target->getUnallowedFieldsForUnicity())
                 ) {
                     $values[$field['Field']] = $searchOption['name'];
@@ -533,12 +532,13 @@ class FieldUnicity extends CommonDropdown
     /**
      * Delete all criterias for an itemtype
      *
-     * @param itemtype
+     * @param string $itemtype
      *
      * @return void
      **/
     public static function deleteForItemtype($itemtype)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $DB->delete(
@@ -557,6 +557,7 @@ class FieldUnicity extends CommonDropdown
      **/
     public static function showDoubles(FieldUnicity $unicity)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $fields       = [];
@@ -570,7 +571,7 @@ class FieldUnicity extends CommonDropdown
         }
 
         echo "<table class='tab_cadre_fixe'>";
-        if (!empty($fields)) {
+        if (count($fields) > 0) {
             $colspan = count($fields) + 1;
             echo "<tr class='tab_bg_2'><th colspan='" . $colspan . "'>" . __('Duplicates') . "</th></tr>";
 

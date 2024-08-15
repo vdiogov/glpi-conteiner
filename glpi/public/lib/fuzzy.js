@@ -1,7 +1,7 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 395:
+/***/ 105:
 /***/ ((module) => {
 
 /*
@@ -150,7 +150,7 @@ fuzzy.filter = function(pattern, arr, opts) {
 
 /***/ }),
 
-/***/ 399:
+/***/ 109:
 /***/ ((module) => {
 
 "use strict";
@@ -733,7 +733,7 @@ module.exports = hotkeys;
 
 /***/ }),
 
-/***/ 398:
+/***/ 108:
 /***/ ((module) => {
 
 "use strict";
@@ -742,22 +742,22 @@ var isff="undefined"!=typeof navigator&&0<navigator.userAgent.toLowerCase().inde
 
 /***/ }),
 
-/***/ 396:
+/***/ 106:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
-/* provided dependency */ var process = __webpack_require__(397);
+/* provided dependency */ var process = __webpack_require__(107);
 if (process.env.NODE_ENV === 'production') {
   // eslint-disable-next-line global-require
-  module.exports = __webpack_require__(398);
+  module.exports = __webpack_require__(108);
 } else {
   // eslint-disable-next-line global-require
-  module.exports = __webpack_require__(399);
+  module.exports = __webpack_require__(109);
 }
 
 
 /***/ }),
 
-/***/ 397:
+/***/ 107:
 /***/ ((module) => {
 
 // shim for using process in browser
@@ -1021,7 +1021,7 @@ var __webpack_exports__ = {};
 (() => {
 "use strict";
 __webpack_require__.r(__webpack_exports__);
-/* harmony import */ var hotkeys_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(396);
+/* harmony import */ var hotkeys_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(106);
 /* harmony import */ var hotkeys_js__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(hotkeys_js__WEBPACK_IMPORTED_MODULE_0__);
 /**
  * ---------------------------------------------------------------------
@@ -1030,7 +1030,7 @@ __webpack_require__.r(__webpack_exports__);
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -1058,7 +1058,7 @@ __webpack_require__.r(__webpack_exports__);
 
 // Fuzzy base lib
 // 'fuzzy' object has to be declared in global scope
-window.fuzzy = __webpack_require__(395);
+window.fuzzy = __webpack_require__(105);
 
 // Required to open search menu with "CTRL+ALT+G"
 

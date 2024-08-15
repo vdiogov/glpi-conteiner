@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -83,16 +83,11 @@ class PDU_Rack extends CommonDBRelation
      *
      * @param array $input Input data
      *
-     * @return array
+     * @return false|array
      */
     private function prepareInput($input)
     {
         $error_detected = [];
-
-        $pdus_id  = $this->fields['pdus_id'];
-        $racks_id = $this->fields['racks_id'];
-        $position = $this->fields['position'];
-        $side     = $this->fields['side'];
 
        //check for requirements
         if ($this->isNewItem()) {
@@ -113,18 +108,10 @@ class PDU_Rack extends CommonDBRelation
             }
         }
 
-        if (isset($input['pdus_id'])) {
-            $pdus_id = $input['pdus_id'];
-        }
-        if (isset($input['racks_id'])) {
-            $racks_id = $input['racks_id'];
-        }
-        if (isset($input['position'])) {
-            $position = $input['position'];
-        }
-        if (isset($input['side'])) {
-            $side = $input['side'];
-        }
+        $pdus_id  = $input['pdus_id'] ?? $this->fields['pdus_id'] ?? null;
+        $racks_id = $input['racks_id'] ?? $this->fields['racks_id'] ?? null;
+        $position = $input['position'] ?? $this->fields['position'] ?? null;
+        $side     = $input['side'] ?? $this->fields['side'] ?? null;
 
         if (!count($error_detected)) {
            //check if required U are available at position
@@ -215,6 +202,7 @@ class PDU_Rack extends CommonDBRelation
 
     public function showForm($ID, array $options = [])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // search used racked (or sided mounted) pdus
@@ -314,6 +302,7 @@ class PDU_Rack extends CommonDBRelation
 
     public static function showListForRack(Rack $rack)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         echo "<h2>" . __("Side pdus") . "</h2>";
@@ -383,7 +372,11 @@ class PDU_Rack extends CommonDBRelation
 
     public static function showStatsForRack(Rack $rack)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $pdu   = new PDU();
         $pdu_m = new PDUModel();
@@ -455,11 +448,11 @@ class PDU_Rack extends CommonDBRelation
                                 break;
                             case self::SIDE_TOP:
                                 echo "<i class='fa fa-arrow-up fa-fw'
-                                 title='" . __("On left") . "'></i>";
+                                 title='" . __("On top") . " (" . $current_pdu['position'] . ")'></i>";
                                 break;
                             case self::SIDE_BOTTOM:
                                 echo "<i class='fa fa-arrow-down fa-fw'
-                                 title='" . __("On left") . "'></i>";
+                                 title='" . __("On bottom") . " (" . $current_pdu['position'] . ")'></i>";
                                 break;
                         }
                     }
@@ -529,6 +522,7 @@ JAVASCRIPT;
 
     public static function showVizForRack(Rack $rack, $side)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $rand  = mt_rand();
@@ -695,6 +689,7 @@ JAVASCRIPT;
      */
     public static function getForRackSide(Rack $rack, $side)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         return $DB->request([
@@ -710,13 +705,16 @@ JAVASCRIPT;
     /**
      * Return an iterator for all used pdu in all racks
      *
-     * @return  Iterator
+     * @param array $fields_requested Fields to request
+     * @return DBmysqlIterator
      */
-    public static function getUsed()
+    public static function getUsed($fields_requested = ['*'])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         return $DB->request([
+            'SELECT' => $fields_requested,
             'FROM'  => self::getTable()
         ]);
     }
@@ -724,23 +722,19 @@ JAVASCRIPT;
     /**
      * Return the opposite side from a passed side
      * @param  integer $side
-     * @return integer       the oposite side
+     * @return false|integer       the opposite side
      */
     public static function getOtherSide($side)
     {
         switch ($side) {
             case self::SIDE_TOP:
                 return self::SIDE_BOTTOM;
-            break;
             case self::SIDE_BOTTOM:
                 return self::SIDE_TOP;
-            break;
             case self::SIDE_LEFT:
                 return self::SIDE_RIGHT;
-            break;
             case self::SIDE_RIGHT:
                 return self::SIDE_LEFT;
-            break;
         }
         return false;
     }

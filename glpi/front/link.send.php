@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,9 @@
  * ---------------------------------------------------------------------
  */
 
+/** @var \DBmysql $DB */
+global $DB;
+
 include('../inc/includes.php');
 
 Session::checkRight("link", READ);
@@ -53,8 +56,8 @@ if (isset($_GET["lID"])) {
 
         if ($item = getItemForItemtype($_GET["itemtype"])) {
             if ($item->getFromDB($_GET["id"])) {
-                $content_filename = Link::generateLinkContents($link, $item);
-                $content_data     = Link::generateLinkContents($file, $item);
+                $content_filename = Link::generateLinkContents($link, $item, false);
+                $content_data     = Link::generateLinkContents($file, $item, false);
 
                 if (isset($_GET['rank']) && isset($content_filename[$_GET['rank']])) {
                     $filename = $content_filename[$_GET['rank']];

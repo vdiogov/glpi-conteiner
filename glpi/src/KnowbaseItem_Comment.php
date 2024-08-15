@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -44,7 +44,7 @@ class KnowbaseItem_Comment extends CommonDBTM
 
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
-        if (!$item->canUpdateItem()) {
+        if (!($item instanceof KnowbaseItem) || !$item->canComment()) {
             return '';
         }
 
@@ -85,6 +85,7 @@ class KnowbaseItem_Comment extends CommonDBTM
      **/
     public static function showForItem(CommonDBTM $item, $withtemplate = 0)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        // Total Number of comments
@@ -234,6 +235,7 @@ class KnowbaseItem_Comment extends CommonDBTM
      */
     public static function getCommentsForKbItem($kbitem_id, $lang, $parent = null)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $where = [
@@ -281,7 +283,7 @@ class KnowbaseItem_Comment extends CommonDBTM
             $html .= "<div class='h_date'>" . Html::convDateTime($comment['date_creation']) . "</div>";
             $html .= "<div class='h_user'>";
             $thumbnail_url = User::getThumbnailURLForPicture($user->fields['picture']);
-            $style = !empty($thumbnail_url) ? "background-image: url(\"$thumbnail_url\")" : ("background-color: " . $user->getUserInitialsBgColor());
+            $style = !empty($thumbnail_url) ? "background-image: url(\"$thumbnail_url\"); background-color: inherit;" : ("background-color: " . $user->getUserInitialsBgColor());
             $html .= '<a href="' . $user->getLinkURL() . '">';
             $html .= "<span class='avatar avatar-md rounded' style='{$style}'>";
             if (empty($thumbnail_url)) {

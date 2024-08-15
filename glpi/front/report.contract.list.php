@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,12 @@
  * ---------------------------------------------------------------------
  */
 
+/**
+ * @var array $CFG_GLPI
+ * @var \DBmysql $DB
+ */
+global $CFG_GLPI, $DB;
+
 include('../inc/includes.php');
 
 Session::checkRight("reports", READ);
@@ -55,9 +61,10 @@ if (
     $_POST["item_type"] = $items;
 }
 
+$all_criteria = [];
+
 if (isset($_POST["item_type"]) && is_array($_POST["item_type"])) {
     $query = [];
-    $all_criteria = [];
     foreach ($_POST["item_type"] as $key => $val) {
         if (!in_array($val, $items)) {
             continue;
@@ -185,6 +192,7 @@ if (isset($_POST["item_type"]) && is_array($_POST["item_type"])) {
             }
 
             if (isset($_POST["year"][0]) && ($_POST["year"][0] != 0)) {
+                $ors = [];
                 foreach ($_POST["year"] as $val2) {
                     $ors[] = new QueryExpression('YEAR(' . $DB->quoteName('glpi_infocoms.buy_date') . ') = ' . $DB->quoteValue($val2));
                     $ors[] = new QueryExpression('YEAR(' . $DB->quoteName('glpi_contracts.begin_date') . ') = ' . $DB->quoteValue($val2));

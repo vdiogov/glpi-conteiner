@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -76,7 +76,8 @@ trait Clonable
             'date_mod',
             'date_creation',
             'template_name',
-            'is_template'
+            'is_template',
+            'sons_cache',
         ];
         foreach ($properties_to_clean as $property) {
             if (array_key_exists($property, $input)) {
@@ -117,8 +118,13 @@ trait Clonable
             $override_input[$classname::getItemField($this->getType())] = $this->getID();
 
            // Force entity / recursivity based on cloned parent, with fallback on session values
-            $override_input['entities_id'] = $this->isEntityAssign() ? $this->getEntityID() : Session::getActiveEntity();
-            $override_input['is_recursive'] = $this->maybeRecursive() ? $this->isRecursive() : Session::getIsActiveEntityRecursive();
+            if ($classname::$disableAutoEntityForwarding !== true) {
+                $override_input['entities_id'] = $this->isEntityAssign() ? $this->getEntityID() : Session::getActiveEntity();
+                $override_input['is_recursive'] = $this->maybeRecursive() ? $this->isRecursive() : Session::getIsActiveEntityRecursive();
+            }
+
+            $cloned = []; // Link between old and new ID
+            $relation_newitems = [];
 
             $relation_items = $classname::getItemsAssociatedTo($this->getType(), $source->getID());
             /** @var CommonDBTM $relation_item */
@@ -127,7 +133,22 @@ trait Clonable
                     // Force-set name to avoid adding a "(copy)" suffix to the cloned item
                     $override_input['name'] = $relation_item->fields['name'];
                 }
-                $relation_item->clone($override_input, $history);
+                $origin_id = $relation_item->getID();
+                $itemtype = $relation_item->getType();
+                $cloned[$itemtype][$origin_id] = $relation_item->clone($override_input, $history);
+                $relation_item->getFromDB($cloned[$itemtype][$origin_id]);
+                $relation_newitems[] = $relation_item;
+            }
+            // Update relations between cloned items
+            foreach ($relation_newitems as $relation_newitem) {
+                $itemtype = $relation_newitem->getType();
+                $foreignkey = getForeignKeyFieldForItemType($itemtype);
+                if ($relation_newitem->isField($foreignkey) && isset($cloned[$itemtype][$relation_newitem->fields[$foreignkey]])) {
+                    $relation_newitem->update([
+                        'id' => $relation_newitem->getID(),
+                        $foreignkey => $cloned[$itemtype][$relation_newitem->fields[$foreignkey]]
+                    ]);
+                }
             }
         }
     }
@@ -191,10 +212,11 @@ trait Clonable
      * @param array $override_input custom input to override
      * @param boolean $history do history log ?
      *
-     * @return integer The new ID of the clone (or false if fail)
+     * @return false|integer The new ID of the clone (or false if fail)
      */
     public function clone(array $override_input = [], bool $history = true)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if ($DB->isSlave()) {
@@ -203,7 +225,7 @@ trait Clonable
         $new_item = new static();
         $input = Toolbox::addslashes_deep($this->fields);
         foreach ($override_input as $key => $value) {
-            $input[$key] = $value;
+            $input[$key] = Toolbox::addslashes_deep($value);
         }
         $input = $new_item->cleanCloneInput($input);
 

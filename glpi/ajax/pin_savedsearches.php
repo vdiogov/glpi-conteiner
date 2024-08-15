@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -40,17 +40,16 @@ Html::header_nocache();
 
 Session::checkLoginUser();
 
-$all_pinned = importArrayFromDB($_SESSION['glpisavedsearches_pinned']);
-$already_pinned = $all_pinned[$_POST['itemtype']] ?? 0;
-$all_pinned[$_POST['itemtype']] = $already_pinned ? 0 : 1;
-$_SESSION['glpisavedsearches_pinned'] = exportArrayToDB($all_pinned);
+$success = false;
 
 $user = new User();
-$success = $user->update(
-    [
-        'id'                   => Session::getLoginUserID(),
-        'savedsearches_pinned' => $_SESSION['glpisavedsearches_pinned'],
-    ]
-);
+if (
+    array_key_exists('itemtype', $_POST)
+    && is_string($_POST['itemtype'])
+    && $user->getFromDB(Session::getLoginUserID())
+    && $user->toggleSavedSearchPin($_POST['itemtype'])
+) {
+    $success = true;
+}
 
 echo json_encode(['success' => $success]);

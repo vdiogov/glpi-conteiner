@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -66,8 +66,9 @@ class Plugins
 
     public static $plugins = null;
 
-    public function __construct(bool $connect = false)
+    public function __construct()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $options = [
@@ -97,7 +98,7 @@ class Plugins
      * @param array $options array of options for guzzle lib
      * @param string $method GET/POST, etc
      *
-     * @return Psr\Http\Message\ResponseInterface|false
+     * @return \Psr\Http\Message\ResponseInterface|false
      */
     private function request(
         string $endpoint = '',
@@ -202,11 +203,14 @@ class Plugins
         string $string_filter = "",
         string $sort = 'sort-alpha-asc'
     ) {
+        /** @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE */
         global $GLPI_CACHE;
+
+        $cache_key = self::getCacheKey('marketplace_all_plugins');
 
         if (self::$plugins === null) {
             $plugins_colct = !$force_refresh
-                ? $GLPI_CACHE->get('marketplace_all_plugins', null)
+                ? $GLPI_CACHE->get($cache_key, null)
                 : null;
 
             if ($plugins_colct === null) {
@@ -228,7 +232,7 @@ class Plugins
 
                 if ($this->last_error === null) {
                     // Cache result only if self::getPaginatedCollection() did not returned an incomplete result due to an error
-                    $GLPI_CACHE->set('marketplace_all_plugins', $plugins_colct, HOUR_TIMESTAMP);
+                    $GLPI_CACHE->set($cache_key, $plugins_colct, HOUR_TIMESTAMP);
                 }
             }
 
@@ -382,6 +386,7 @@ class Plugins
      */
     public function getTopTags(): array
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $response  = $this->request('tags/top', [
@@ -410,16 +415,19 @@ class Plugins
      */
     public function getPluginsForTag(string $tag = "", bool $force_refresh = false): array
     {
+        /** @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE */
         global $GLPI_CACHE;
 
-        $plugins_colct = !$force_refresh ? $GLPI_CACHE->get("marketplace_tag_$tag", []) : [];
+        $cache_key = self::getCacheKey("marketplace_tag_$tag");
+
+        $plugins_colct = !$force_refresh ? $GLPI_CACHE->get($cache_key, []) : [];
 
         if (!count($plugins_colct)) {
             $plugins_colct = $this->getPaginatedCollection("tags/{$tag}/plugin");
 
             if ($this->last_error === null) {
                 // Cache result only if self::getPaginatedCollection() did not returned an incomplete result due to an error
-                $GLPI_CACHE->set("marketplace_tag_$tag", $plugins_colct, HOUR_TIMESTAMP);
+                $GLPI_CACHE->set($cache_key, $plugins_colct, HOUR_TIMESTAMP);
             }
         }
 
@@ -501,5 +509,10 @@ class Plugins
     public function isListTruncated(): bool
     {
         return $this->is_list_truncated;
+    }
+
+    private static function getCacheKey(string $item_key): string
+    {
+        return $item_key . '_' . GLPINetwork::getRegistrationKey();
     }
 }

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -50,10 +50,14 @@ class DisplayPreference extends CommonDBTM
     const PERSONAL = 1024;
     const GENERAL  = 2048;
 
-
+    public static function getTypeName($nb = 0)
+    {
+        return __('Search result display');
+    }
 
     public function prepareInputForAdd($input)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $result = $DB->request([
@@ -117,6 +121,7 @@ class DisplayPreference extends CommonDBTM
      **/
     public static function getForTypeUser($itemtype, $user_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -153,6 +158,7 @@ class DisplayPreference extends CommonDBTM
      **/
     public function activatePerso(array $input)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!Session::haveRight(self::$rightname, self::PERSONAL)) {
@@ -209,6 +215,7 @@ class DisplayPreference extends CommonDBTM
      **/
     public function orderItem(array $input, $action)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // Get current item
@@ -274,6 +281,7 @@ class DisplayPreference extends CommonDBTM
      */
     protected function getFixedColumns(string $itemtype): array
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $fixed_columns = [];
@@ -317,6 +325,7 @@ class DisplayPreference extends CommonDBTM
      **/
     public function showFormPerso($target, $itemtype)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $searchopt = Search::getCleanedOptions($itemtype);
@@ -407,6 +416,7 @@ class DisplayPreference extends CommonDBTM
                     if ((!in_array($data["num"], $fixed_columns)) && isset($searchopt[$data["num"]])) {
                         echo "<tr>";
                         echo "<td>";
+                        echo $this->nameOfGroupForItemInSearchopt($searchopt, $data["num"]);
                         echo $searchopt[$data["num"]]["name"] . "</td>";
 
                         if ($i != 0) {
@@ -463,6 +473,38 @@ class DisplayPreference extends CommonDBTM
         echo "</div>";
     }
 
+
+    /**
+     * Return the group name of an element in the searchopt array
+     *
+     * The group names are located before the items that belong to it, and are the only string keys, every item's key are integer.
+     *
+     * We first get the keys of the array to be able to iterate trought his items, including the group names.
+     * So we iterate trought the array key's in a reverse order,
+     * starting from the position before the item which we want to get the group name.
+     * The first key of string type we encouter, is our item's group name.
+     *
+     * @param array $searchopt
+     * @param int   $searchoptkey
+     *
+     * @return string Return the name of the group or an empty string.
+     *
+     * @since 10.0.8
+     */
+    private function nameOfGroupForItemInSearchopt(array $search_options, int $search_option_key): string
+    {
+        $search_options_keys = array_keys($search_options);
+
+        for ($key = array_search($search_option_key, $search_options_keys) - 1; $key > 0; $key--) {
+            if (is_string($search_options_keys[$key])) {
+                return ($search_options[$search_options_keys[$key]]['name'] ?? $key) . " - ";
+            }
+        }
+
+        return "";
+    }
+
+
     /**
      * Print the search config form
      *
@@ -473,6 +515,7 @@ class DisplayPreference extends CommonDBTM
      **/
     public function showFormGlobal($target, $itemtype)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $searchopt = Search::getCleanedOptions($itemtype);
@@ -556,6 +599,7 @@ class DisplayPreference extends CommonDBTM
                     && isset($searchopt[$data["num"]])
                 ) {
                     echo "<tr><td>";
+                    echo $this->nameOfGroupForItemInSearchopt($searchopt, $data["num"]);
                     echo $searchopt[$data["num"]]["name"];
                     echo "</td>";
 
@@ -623,6 +667,7 @@ class DisplayPreference extends CommonDBTM
      **/
     public static function showForUser($users_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $url = Toolbox::getItemTypeFormURL(__CLASS__);

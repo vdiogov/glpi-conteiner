@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -210,6 +210,7 @@ class Alert extends CommonDBTM
      */
     public static function alertExists($itemtype, $items_id, $type)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if ($items_id <= 0 || $type <= 0) {
@@ -237,6 +238,7 @@ class Alert extends CommonDBTM
      */
     public static function getAlertDate($itemtype, $items_id, $type)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if ($items_id <= 0 || $type <= 0) {
@@ -260,6 +262,7 @@ class Alert extends CommonDBTM
      */
     public static function displayLastAlert($itemtype, $items_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if ($items_id) {

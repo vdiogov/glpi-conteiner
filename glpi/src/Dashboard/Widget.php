@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -63,6 +63,7 @@ class Widget
      */
     public static function getAllTypes(): array
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $types = [
@@ -392,7 +393,6 @@ HTML;
         $class = $p['class'];
         $class .= count($p['filters']) > 0 ? " filter-" . implode(' filter-', $p['filters']) : "";
 
-        $alphabet = range('a', 'z');
         $numbers_html = "";
         $i = 0;
         foreach ($p['data'] as $entry) {
@@ -416,7 +416,7 @@ HTML;
             $formatted_number = Toolbox::shortenNumber($entry['number']);
 
             $numbers_html .= <<<HTML
-            <a {$href} class="line line-{$alphabet[$i]}">
+            <a {$href} class="line line-{$i}">
                <span class="content" {$color}>$formatted_number</span>
                <i class="icon {$entry['icon']}" {$color2}></i>
                <span class="label" {$color2}>{$entry['label']}</span>
@@ -593,7 +593,7 @@ HTML;
 
          {$palette_style}
       </style>
-      <div>
+      <div style="height: 100%">
          <div class="card g-chart {$class}"
             id="{$chart_id}">
             <div class="chart ct-chart">{$no_data_html}</div>
@@ -656,11 +656,16 @@ HTML;
 
         $js = <<<JAVASCRIPT
       $(function () {
-         var chart = new Chartist.Pie('#{$chart_id} .chart', {
+         if (Dashboard.getActiveDashboard()) {
+            var target = Dashboard.getActiveDashboard().element.find('#{$chart_id} .chart')[0];
+         } else {
+            var target = '#{$chart_id} .chart';
+         }
+         var chart = new Chartist.Pie(target, {
             labels: {$labels},
             series: {$series},
          }, {
-            width: 'calc(100% - 5px)',
+            width: '100%',
             chartPadding: {$chartPadding},
             donut: {$donut},
             $donut_opts
@@ -685,7 +690,7 @@ HTML;
                      'data-clickable': true
                   });
                   data.element._node.onclick = function() {
-                     if (!Dashboard.edit_mode) {
+                     if (!Dashboard.getActiveDashboard().edit_mode) {
                         window.location = url;
                      }
                   }
@@ -1094,7 +1099,7 @@ JAVASCRIPT;
       {$palette_style}
       </style>
 
-      <div>
+      <div style="height: 100%">
          <div class="card g-chart $class"
                id="{$chart_id}">
             <div class="chart ct-chart">$no_data_html</div>
@@ -1147,7 +1152,12 @@ HTML;
 
         $js = <<<JAVASCRIPT
       $(function () {
-         var chart = new Chartist.Bar('#{$chart_id} .chart', {
+         if (Dashboard.getActiveDashboard()) {
+            var target = Dashboard.getActiveDashboard().element.find('#{$chart_id} .chart')[0];
+         } else {
+            var target = '#{$chart_id} .chart';
+         }
+         var chart = new Chartist.Bar(target, {
             labels: {$json_labels},
             series: {$json_series},
          }, {
@@ -1195,7 +1205,7 @@ HTML;
                      'data-clickable': true
                   });
                   data.element._node.onclick = function() {
-                     if (!Dashboard.edit_mode) {
+                     if (!Dashboard.getActiveDashboard().edit_mode) {
                         window.location = url;
                      }
                   }
@@ -1514,6 +1524,14 @@ JAVASCRIPT;
             Chartist.plugins.legend(),";
         }
 
+        // Adding a legend will add an "<ul>" element in a div that already have
+        // a <svg> child set to take 100% of the available height
+        // This will create some overflow that will impact the content below the
+        // graph (the label)
+        // We avoid that by adding some padding at the top of the label if a
+        // legend is defined
+        $label_class = $p['legend'] ? "mt-4" : "";
+
         $html = <<<HTML
       <style>
 
@@ -1553,11 +1571,11 @@ JAVASCRIPT;
       {$palette_style}
       </style>
 
-      <div>
+      <div style="height: 100%">
           <div class="card g-chart $class"
                id="{$chart_id}">
              <div class="chart ct-chart"></div>
-             <span class="main-label">{$p['label']}</span>
+             <span class="main-label {$label_class}">{$p['label']}</span>
              <i class="main-icon {$p['icon']}"></i>
           </div>
       </div>
@@ -1571,7 +1589,12 @@ HTML;
 
         $js = <<<JAVASCRIPT
       $(function () {
-         var chart = new Chartist.Line('#{$chart_id} .chart', {
+         if (Dashboard.getActiveDashboard()) {
+            var target = Dashboard.getActiveDashboard().element.find('#{$chart_id} .chart')[0];
+         } else {
+            var target = '#{$chart_id} .chart';
+         }
+         var chart = new Chartist.Line(target, {
             labels: {$json_labels},
             series: {$json_series},
          }, {
@@ -1581,18 +1604,27 @@ HTML;
                right: 40
             },
             axisY: {
-               labelInterpolationFnc: function(value) {
-                  if (value < 1e3) {
-                     // less than 1K
-                     return value;
-                  } else if (value < 1e6) {
-                     // More than 1k, less than 1M
-                     return value / 1e3 + "K";
-                  } else {
-                     // More than 1M
-                     return value / 1e6 + "M";
-                  }
-               },
+                labelInterpolationFnc: function(value) {
+                    let display_value = 0;
+                    let unit = "";
+                    if (value < 1e3) {
+                        // less than 1K
+                        display_value = value;
+                    } else if (value < 1e6) {
+                        // More than 1k, less than 1M
+                        display_value =  value / 1e3;
+                        unit = "K";
+                    } else {
+                        // More than 1M
+                        display_value = value / 1e6;
+                        unit = "M";
+                    }
+
+                    // 1 decimal max
+                    display_value = Math.round(display_value * 10) / 10;
+
+                    return display_value + unit;
+                },
             },
             {$area_options}
             plugins: [
@@ -1639,7 +1671,7 @@ HTML;
 
                if (clickable) {
                   circle.getNode().onclick = function() {
-                     if (!Dashboard.edit_mode) {
+                     if (!Dashboard.getActiveDashboard().edit_mode) {
                         window.location = url;
                      }
                   }
@@ -1709,12 +1741,14 @@ JAVASCRIPT;
             return $code;
         };
 
+        $content = RichText::getSafeHtml($md->transform($p['markdown_content']));
+
         $html = <<<HTML
       <div
          class="card markdown"
          style="background-color: {$p['color']}; color: {$fg_color}; border-color: {$border_color}">
 
-         <div class="html_content">{$md->transform($p['markdown_content'])}</div>
+         <div class="html_content">{$content}</div>
          <textarea
             class="markdown_content"
             placeholder="{$ph}">{$p['markdown_content']}</textarea>
@@ -1781,7 +1815,7 @@ HTML;
         ];
 
         ob_start();
-        $params = Search::manageParams($p['itemtype'], $params);
+        $params = Search::manageParams($p['itemtype'], $params, false);
        // remove parts of search list
         $params = array_merge($params, [
             'showmassiveactions' => false,
@@ -1979,7 +2013,6 @@ JAVASCRIPT;
             ];
         }
 
-        $alphabet = range('a', 'z');
         $min_l = 20; // min for luminosity
         $max_l = 20; // max ...
         $min_s = 30; // min for saturation
@@ -1994,7 +2027,7 @@ JAVASCRIPT;
         $colors = [];
 
         for ($i = 1; $i <= $nb_series; $i++) {
-            $names[$i - 1] = $alphabet[$i - 1];
+            $names[$i - 1] = $i - 1;
 
            // adjust luminosity
             $i_l_step = $i * $step_l + $min_l / 100;
@@ -2029,6 +2062,7 @@ JAVASCRIPT;
         string $css_dom_parent = "",
         bool $revert = true
     ) {
+        /** @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE */
         global $GLPI_CACHE;
 
         $palette = self::getGradientPalette($bgcolor, $nb_series, $revert);

@@ -1,9 +1,3 @@
-/*!
- * TinyMCE Language Pack
- *
- * Copyright (c) 2022 Ephox Corporation DBA Tiny Technologies, Inc.
- * Licensed under the Tiny commercial license. See https://www.tiny.cloud/legal/
- */
 tinymce.addI18n("fr_FR", {
     "Redo": "R\xe9tablir",
     "Undo": "Annuler",
@@ -205,8 +199,8 @@ tinymce.addI18n("fr_FR", {
     "Column header": "En-t\xeate de colonne",
     "Row header": "En-t\xeate de ligne",
     "Table caption": "L\xe9gende de tableau",
-    "Caption": "Titre",
-    "Show caption": "Afficher le sous-titrage",
+    "Caption": "L\xe9gende",
+    "Show caption": "Afficher une l\xe9gende",
     "Left": "Gauche",
     "Center": "Centre",
     "Right": "Droite",

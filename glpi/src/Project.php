@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -252,6 +252,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
      **/
     public static function getAdditionalMenuLinks()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $links = [];
@@ -277,8 +278,9 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
     }
 
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (in_array('auto_percent_done', $this->updates) && $this->input['auto_percent_done'] == 1) {
@@ -306,6 +308,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
 
     public function post_addItem()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        // Update parent percent_done
@@ -362,6 +365,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
 
     public function pre_deleteItem()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!isset($this->input['_disablenotif']) && $CFG_GLPI['use_notifications']) {
@@ -517,6 +521,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
 
     public function rawSearchOptions()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $tab = [];
@@ -931,6 +936,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
             'massiveaction'      => false,
             'forcegroupby'       => true,
             'splititems'         => true,
+            'additionalfields'   => ['color'],
             'joinparams'         => [
                 'jointype'          => 'item_revert',
                 'specific_itemtype' => 'ProjectState',
@@ -1025,7 +1031,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
         ];
 
         $tab[] = [
-            'id'                 => '119',
+            'id'                 => '1400',
             'table'              => ProjectTask::getTable(),
             'field'              => 'plan_end_date',
             'name'               => __('Planned end date'),
@@ -1192,6 +1198,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
      */
     public static function showShort($id, $options = [])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $p['output_type']            = Search::HTML_OUTPUT;
@@ -1465,6 +1472,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
      **/
     public function showChildren()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $ID   = $this->getID();
@@ -1559,6 +1567,19 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
                 echo "<td colspan='2'>&nbsp;</td>";
             }
             echo "</tr>";
+        } elseif ($is_template & !$this->isNewItem()) {
+            // Show template name after creation (creation is already handled by
+            // showFormHeader which add the template name in a special header
+            // only displayed on creation)
+            echo "<tr class='tab_bg_1'>";
+            echo "<td>" . __('Template name') . "</td>";
+            echo "<td>";
+            echo Html::input('template_name', [
+                'value' => $this->fields['template_name']
+            ]);
+            echo "</td>";
+            echo "<td colspan='2'>&nbsp;</td>";
+            echo "</tr>";
         }
 
         echo "<tr class='tab_bg_1'>";
@@ -1622,7 +1643,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
             'type'      => 'checkbox',
             'name'      => 'auto_percent_done',
             'title'     => __('Automatically calculate'),
-            'onclick'   => "$(\"select[name='percent_done']\").prop('disabled', !$(\"input[name='auto_percent_done']\").prop('checked'));"
+            'onclick'   => "$(\"select[name='percent_done']\").prop('disabled', $(\"input[type='checkbox'][name='auto_percent_done']\").prop('checked'));"
         ];
         if ($this->fields['auto_percent_done']) {
             $auto_percent_done_params['checked'] = 'checked';
@@ -1877,6 +1898,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
 
     public static function getAllForKanban($active = true, $current_id = -1)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $items = [
@@ -1942,30 +1964,74 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
 
     public static function getAllKanbanColumns($column_field = null, $column_ids = [], $get_default = false)
     {
+        $result = [];
+
         if ($column_field === null || $column_field == 'projectstates_id') {
-            $columns = ['projectstates_id' => []];
+            /** @var \DBmysql $DB */
+            global $DB;
+
             $projectstate = new ProjectState();
             $restrict = [];
             if (!empty($column_ids) && !$get_default) {
                 $restrict = ['id' => $column_ids];
             }
-            $allstates = $projectstate->find($restrict, ['is_finished ASC', 'id']);
-            foreach ($allstates as $state) {
-                $columns['projectstates_id'][$state['id']] = [
-                    'name'            => $state['name'],
-                    'header_color'    => $state['color'],
-                    'header_fg_color' => Toolbox::getFgColor($state['color'], 50),
+
+            $addselect = [];
+            $ljoin = [];
+            if (Session::haveTranslations(ProjectState::getType(), 'name')) {
+                $addselect[] = "namet2.value AS transname";
+                $ljoin['glpi_dropdowntranslations AS namet2'] = [
+                    'ON' => [
+                        'namet2' => 'items_id',
+                        ProjectState::getTable()   => 'id', [
+                            'AND' => [
+                                'namet2.itemtype' => ProjectState::getType(),
+                                'namet2.language' => $_SESSION['glpilanguage'],
+                                'namet2.field'    => 'name'
+                            ]
+                        ]
+                    ]
                 ];
             }
-            return $columns['projectstates_id'];
-        } else {
-            return [];
+
+            $criteria = [
+                'SELECT'   => array_merge([ProjectState::getTable() . ".*"], $addselect),
+                'DISTINCT' => true,
+                'FROM'     => ProjectState::getTable(),
+                'WHERE'    => $restrict
+            ];
+            if (count($ljoin)) {
+                $criteria['LEFT JOIN'] = $ljoin;
+            }
+            $iterator = $DB->request($criteria);
+
+            if (count($iterator)) {
+                foreach ($iterator as $projectstate) {
+                    $result[$projectstate['id']] = [
+                        'name'            => $projectstate['transname'] ?? $projectstate['name'],
+                        'id'              => $projectstate['id'],
+                        'header_color'    => $projectstate['color'],
+                        'header_fg_color' => Toolbox::getFgColor($projectstate['color'], 50),
+                    ];
+                }
+            }
+
+            // sort by name ASC
+            uasort($result, function ($a, $b) {
+                return strnatcasecmp($a['name'], $b['name']);
+            });
         }
+
+        return $result;
     }
 
     public static function getDataToDisplayOnKanban($ID, $criteria = [])
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $items      = [];
 
@@ -1977,7 +2043,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
 
         $required_project_fields = [
             'id', 'name', 'content', 'plan_start_date', 'plan_end_date', 'real_start_date',
-            'real_end_date', 'percent_done', 'projects_id', 'projectstates_id',
+            'real_end_date', 'percent_done', 'projects_id', 'projectstates_id', 'is_deleted'
         ];
         $request = [
             'SELECT' => [
@@ -2032,7 +2098,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
 
        // Build team member data
         $supported_teamtypes = [
-            'User' => ['id', 'firstname', 'realname'],
+            'User' => ['id', 'name', 'firstname', 'realname'],
             'Group' => ['id', 'name'],
             'Supplier' => ['id', 'name'],
             'Contact' => ['id', 'name', 'firstname']
@@ -2101,8 +2167,9 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
                         if (count($contact_matches)) {
                               $match = reset($contact_matches);
                               // contact -> name, user -> realname
-                              $realname = $match['name'] ?? $match['realname'] ?? "";
-                              $match['name'] = formatUserName($match['id'], '', $realname, $match['firstname']);
+                              $realname = $teammember['itemtype'] === 'User' ? $match['realname'] : $match['name'];
+                              $name = $teammember['itemtype'] === 'User' ? $match['name'] : '';
+                              $match['name'] = formatUserName($match['id'], $name, $realname, $match['firstname']);
                               $item['_team'][] = array_merge($teammember, $match);
                         }
                         break;
@@ -2149,7 +2216,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
                         if (count($contact_matches)) {
                               $match = reset($contact_matches);
                             if ($teammember['itemtype'] === 'User') {
-                                $match['name'] = formatUserName($match['id'], '', $match['realname'], $match['firstname']);
+                                $match['name'] = formatUserName($match['id'], $match['name'], $match['realname'], $match['firstname']);
                             } else {
                                 $match['name'] = formatUserName($match['id'], '', $match['name'], $match['firstname']);
                             }
@@ -2203,7 +2270,6 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
                 'id'              => "{$itemtype}-{$item['id']}",
                 'title'           => '<span class="pointer">' . $item['name'] . '</span>',
                 'title_tooltip'   => Html::resume_text(RichText::getTextFromHtml($item['content'] ?? "", false, true), 100),
-                'is_deleted'      => $item['is_deleted'] ?? false,
             ];
 
             $content = "<div class='kanban-plugin-content'>";
@@ -2264,7 +2330,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
             $card['_form_link'] = $itemtype::getFormUrlWithID($item['id']);
             $card['_metadata'] = [];
             $metadata_values = ['name', 'content', 'is_milestone', 'plan_start_date', 'plan_end_date', 'real_start_date', 'real_end_date',
-                'planned_duration', 'effective_duration', 'percent_done'
+                'planned_duration', 'effective_duration', 'percent_done', 'is_deleted'
             ];
             foreach ($metadata_values as $metadata_value) {
                 if (isset($item[$metadata_value])) {
@@ -2312,7 +2378,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
 
     /**
      * Show Kanban view.
-     * @param int $ID ID of the parent Project or -1 for a global view.
+     * @param int $ID ID of the parent Project or 0 for a global view.
      * @return bool|void False if the Kanban cannot be shown.
      */
     public static function showKanban($ID)
@@ -2326,100 +2392,99 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
         }
 
         $supported_itemtypes = [];
-        if (Project::canCreate()) {
-            $team_role_ids = static::getTeamRoles();
-            $team_roles = [];
+        $team_role_ids = static::getTeamRoles();
+        $team_roles = [];
 
-            foreach ($team_role_ids as $role_id) {
-                $team_roles[$role_id] = static::getTeamRoleName($role_id);
-            }
-           // Owner cannot be set from the Kanban view yet because it is a special case (One owner user and one owner group)
-            unset($team_roles[Team::ROLE_OWNER]);
-
-            $supported_itemtypes['Project'] = [
-                'name'   => Project::getTypeName(1),
-                'icon'   => Project::getIcon(),
-                'fields' => [
-                    'projects_id'  => [
-                        'type'   => 'hidden',
-                        'value'  => $ID
-                    ],
-                    'name'   => [
-                        'placeholder'  => __('Name')
-                    ],
-                    'content'   => [
-                        'placeholder'  => __('Content'),
-                        'type'         => 'textarea'
-                    ],
-                    'users_id'  => [
-                        'type'         => 'hidden',
-                        'value'        => $_SESSION['glpiID']
-                    ],
-                    'entities_id' => [
-                        'type'   => 'hidden',
-                        'value'  => $ID > 0 ? $project->fields["entities_id"] : $_SESSION['glpiactive_entity'],
-                    ],
-                    'is_recursive' => [
-                        'type'   => 'hidden',
-                        'value'  => 0
-                    ]
-                ],
-                'team_itemtypes'  => Project::getTeamItemtypes(),
-                'team_roles'      => $team_roles,
-            ];
+        foreach ($team_role_ids as $role_id) {
+            $team_roles[$role_id] = static::getTeamRoleName($role_id);
         }
+        // Owner cannot be set from the Kanban view yet because it is a special case (One owner user and one owner group)
+        unset($team_roles[Team::ROLE_OWNER]);
 
-        if (ProjectTask::canCreate()) {
-            $team_role_ids = static::getTeamRoles();
-            $team_roles = [];
-
-            foreach ($team_role_ids as $role_id) {
-                $team_roles[$role_id] = static::getTeamRoleName($role_id);
-            }
-           // Owner cannot be set from the Kanban view yet because it is a special case (One owner user and one owner group)
-            unset($team_roles[Team::ROLE_OWNER]);
-
-            $supported_itemtypes['ProjectTask'] = [
-                'name'   => ProjectTask::getTypeName(1),
-                'icon'   => ProjectTask::getIcon(),
-                'fields' => [
-                    'projects_id'  => [
-                        'type'   => 'hidden',
-                        'value'  => $ID
-                    ],
-                    'name'   => [
-                        'placeholder'  => __('Name')
-                    ],
-                    'content'   => [
-                        'placeholder'  => __('Content'),
-                        'type'         => 'textarea'
-                    ],
-                    'projecttasktemplates_id' => [
-                        'type'   => 'hidden',
-                        'value'  => 0
-                    ],
-                    'projecttasks_id' => [
-                        'type'   => 'hidden',
-                        'value'  => 0
-                    ],
-                    'entities_id' => [
-                        'type'   => 'hidden',
-                        'value'  => $ID > 0 ? $project->fields["entities_id"] : $_SESSION['glpiactive_entity'],
-                    ],
-                    'is_recursive' => [
-                        'type'   => 'hidden',
-                        'value'  => 0
-                    ]
+        $supported_itemtypes['Project'] = [
+            'name'   => Project::getTypeName(1),
+            'icon'   => Project::getIcon(),
+            'fields' => [
+                'projects_id'  => [
+                    'type'   => 'hidden',
+                    'value'  => $ID
                 ],
-                'team_itemtypes'  => ProjectTask::getTeamItemtypes(),
-                'team_roles'      => $team_roles,
+                'name'   => [
+                    'placeholder'  => __('Name')
+                ],
+                'content'   => [
+                    'placeholder'  => __('Content'),
+                    'type'         => 'textarea'
+                ],
+                'users_id'  => [
+                    'type'         => 'hidden',
+                    'value'        => $_SESSION['glpiID']
+                ],
+                'entities_id' => [
+                    'type'   => 'hidden',
+                    'value'  => $ID > 0 ? $project->fields["entities_id"] : $_SESSION['glpiactive_entity'],
+                ],
+                'is_recursive' => [
+                    'type'   => 'hidden',
+                    'value'  => $ID > 0 ? $project->fields["is_recursive"] : 0
+                ]
+            ],
+            'team_itemtypes'  => Project::getTeamItemtypes(),
+            'team_roles'      => $team_roles,
+            'allow_create'    => Project::canCreate()
+        ];
+
+        $team_role_ids = static::getTeamRoles();
+        $team_roles = [];
+
+        foreach ($team_role_ids as $role_id) {
+            $team_roles[$role_id] = static::getTeamRoleName($role_id);
+        }
+        // Owner cannot be set from the Kanban view yet because it is a special case (One owner user and one owner group)
+        unset($team_roles[Team::ROLE_OWNER]);
+
+        $supported_itemtypes['ProjectTask'] = [
+            'name'   => ProjectTask::getTypeName(1),
+            'icon'   => ProjectTask::getIcon(),
+            'fields' => [
+                'projects_id'  => [
+                    'type'   => 'hidden',
+                    'value'  => $ID
+                ],
+                'name'   => [
+                    'placeholder'  => __('Name')
+                ],
+                'content'   => [
+                    'placeholder'  => __('Content'),
+                    'type'         => 'textarea'
+                ],
+                'projecttasktemplates_id' => [
+                    'type'   => 'hidden',
+                    'value'  => 0
+                ],
+                'projecttasks_id' => [
+                    'type'   => 'hidden',
+                    'value'  => 0
+                ],
+                'entities_id' => [
+                    'type'   => 'hidden',
+                    'value'  => $ID > 0 ? $project->fields["entities_id"] : $_SESSION['glpiactive_entity'],
+                ],
+                'is_recursive' => [
+                    'type'   => 'hidden',
+                    'value'  => $ID > 0 ? $project->fields["is_recursive"] : 0
+                ]
+            ],
+            'team_itemtypes'  => ProjectTask::getTeamItemtypes(),
+            'team_roles'      => $team_roles,
+            'allow_create'    => ProjectTask::canCreate(),
+            'allow_bulk_add'  => $ID > 0
+        ];
+        if ($ID <= 0) {
+            $supported_itemtypes['ProjectTask']['fields']['projects_id'] = [
+                'type'   => 'raw',
+                'value'  => Project::dropdown(['display' => false, 'width' => '90%'])
             ];
-            if ($ID <= 0) {
-                $supported_itemtypes['ProjectTask']['fields']['projects_id'] = [
-                    'type'   => 'raw',
-                    'value'  => Project::dropdown(['display' => false, 'width' => '90%'])
-                ];
-            }
         }
         $column_field = [
             'id' => 'projectstates_id',
@@ -2466,6 +2531,10 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
                 'content' => [
                     'description' => _x('filters', 'The content of the item'),
                     'supported_prefixes' => ['!', '#']
+                ],
+                'deleted' => [
+                    'description' => _x('filters', 'If the item is deleted or not'),
+                    'supported_prefixes' => ['!']
                 ],
                 'team' => [
                     'description' => _x('filters', 'A team member for the item'),
@@ -2574,6 +2643,7 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
      */
     public static function recalculatePercentDone($ID)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $project = new self();
@@ -2623,6 +2693,37 @@ class Project extends CommonDBTM implements ExtraVisibilityCriteria
         return true;
     }
 
+    public static function rawSearchOptionsToAdd($itemtype = null)
+    {
+        $tab = [];
+
+        if (is_a($itemtype, CommonITILObject::class, true)) {
+            $link_table = Itil_Project::getTable();
+        } else {
+            $link_table = Item_Project::getTable();
+        }
+
+        $tab[] = [
+            'id'                 => '450',
+            'table'              => Project::getTable(),
+            'field'              => 'name',
+            'name'               => Project::getTypeName(1),
+            'massiveaction'      => false,
+            'searchtype'         => ['equals', 'notequals'],
+            'datatype'           => 'dropdown',
+            'joinparams'         => [
+                'jointype'           => 'items_id',
+                'beforejoin'         => [
+                    'table'              => $link_table,
+                    'joinparams'         => [
+                        'jointype'           => 'itemtype_item'
+                    ]
+                ]
+            ]
+        ];
+
+        return $tab;
+    }
 
     public static function getIcon()
     {

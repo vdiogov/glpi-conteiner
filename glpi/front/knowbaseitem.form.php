@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -34,6 +34,9 @@
  */
 
 use Glpi\Event;
+
+/** @var array $CFG_GLPI */
+global $CFG_GLPI;
 
 include('../inc/includes.php');
 
@@ -101,7 +104,7 @@ if (isset($_POST["add"])) {
         isset($_POST["_type"]) && !empty($_POST["_type"])
         && isset($_POST["knowbaseitems_id"]) && $_POST["knowbaseitems_id"]
     ) {
-        if ($_POST['entities_id'] == -1) {
+        if (array_key_exists('entities_id', $_POST) && $_POST['entities_id'] == -1) {
             // "No restriction" value selected
             $_POST['entities_id'] = 'NULL';
             $_POST['no_entity_restriction'] = 1;

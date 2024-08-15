@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -34,6 +34,10 @@
  */
 
 namespace Glpi\Features;
+
+use CommonDBTM;
+use Glpi\Application\View\TemplateRenderer;
+use ProjectTeam;
 
 /**
  * Trait for itemtypes that can have a team
@@ -87,4 +91,14 @@ trait Teamwork
      * @since 10.0.0
      */
     abstract public function getTeam(): array;
+
+    public static function getTeamMemberForm(CommonDBTM $item): string
+    {
+        $members_types = ProjectTeam::$available_types;
+
+        return TemplateRenderer::getInstance()->render('components/kanban/teammember.html.twig', [
+            'item' => $item,
+            'members_types' => $members_types,
+        ]);
+    }
 }

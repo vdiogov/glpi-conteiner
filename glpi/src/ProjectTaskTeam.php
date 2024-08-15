@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -135,6 +135,7 @@ class ProjectTaskTeam extends CommonDBRelation
      **/
     public static function getTeamFor($tasks_id, bool $expand = false)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $team = [];
@@ -166,6 +167,7 @@ class ProjectTaskTeam extends CommonDBRelation
 
     public function prepareInputForAdd($input)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!isset($input['itemtype'])) {

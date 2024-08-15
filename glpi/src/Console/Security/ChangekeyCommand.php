@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,11 +36,12 @@
 namespace Glpi\Console\Security;
 
 use Glpi\Console\AbstractCommand;
+use Glpi\Console\Command\ConfigurationCommandInterface;
 use GLPIKey;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-class ChangekeyCommand extends AbstractCommand
+class ChangekeyCommand extends AbstractCommand implements ConfigurationCommandInterface
 {
     /**
      * Error code returned when unable to renew key.
@@ -53,7 +54,7 @@ class ChangekeyCommand extends AbstractCommand
     {
         parent::configure();
 
-        $this->setName('glpi:security:change_key');
+        $this->setName('security:change_key');
         $this->setDescription(__('Change password storage key and update values in database.'));
     }
 
@@ -92,5 +93,10 @@ class ChangekeyCommand extends AbstractCommand
         $output->writeln('<info>' . __('New security key generated; database updated.') . '</info>');
 
         return 0; // Success
+    }
+
+    public function getConfigurationFilesToUpdate(InputInterface $input): array
+    {
+        return ['glpicrypt.key'];
     }
 }

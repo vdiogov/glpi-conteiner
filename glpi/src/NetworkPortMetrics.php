@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -104,6 +104,7 @@ class NetworkPortMetrics extends CommonDBChild
      */
     public function getMetrics(NetworkPort $netport, $user_filters = []): array
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $bdate = new DateTime();
@@ -158,7 +159,7 @@ class NetworkPortMetrics extends CommonDBChild
             unset($errors_metrics['ifinbytes'], $errors_metrics['ifoutbytes']);
             foreach ($errors_metrics as $key => $value) {
                 $errors_series[$key]['name'] = $this->getLabelFor($key);
-                $errors_series[$key]['data'][] = round($value / 1024 / 1024, 0); //convert bytes to megabytes
+                $errors_series[$key]['data'][] = $value;
             }
         }
 

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,9 @@
  * ---------------------------------------------------------------------
  */
 
+/** @var array $CFG_GLPI */
+global $CFG_GLPI;
+
 $AJAX_INCLUDE = 1;
 include('../inc/includes.php');
 
@@ -41,8 +44,6 @@ header("Content-Type: text/html; charset=UTF-8");
 Html::header_nocache();
 
 Session::checkLoginUser();
-
-/** @global array $CFG_GLPI */
 
 if (
     isset($_POST["itemtype"])
@@ -61,23 +62,28 @@ if (
                     'comment' => "",
                 ];
             } else {
+                $user = new \User();
                 if (is_array($_POST["value"])) {
                     $comments = [];
                     foreach ($_POST["value"] as $users_id) {
-                        $username   = getUserName($users_id, 2);
-                        $comments[] = $username['comment'] ?? "";
+                        if ($user->getFromDB($users_id) && $user->canView()) {
+                            $username   = getUserName($users_id, 2);
+                            $comments[] = $username['comment'] ?? "";
+                        }
                     }
                     $tmpname = [
                         'comment' => implode("<br>", $comments),
                     ];
                     unset($_POST['withlink']);
                 } else {
-                    $tmpname = getUserName($_POST["value"], 2);
+                    if ($user->getFromDB($_POST['value']) && $user->canView()) {
+                        $tmpname = getUserName($_POST["value"], 2);
+                    }
                 }
             }
-            echo $tmpname["comment"];
+            echo ($tmpname["comment"] ?? '');
 
-            if (isset($_POST['withlink'])) {
+            if (isset($_POST['withlink']) && isset($tmpname['link'])) {
                 echo "<script type='text/javascript' >\n";
                 echo Html::jsGetElementbyID($_POST['withlink']) . ".attr('href', '" . $tmpname['link'] . "');";
                 echo "</script>\n";
@@ -114,7 +120,7 @@ if (
                 }
 
                 if (isset($_POST['with_dc_position'])) {
-                    $item = new $_POST['itemtype']();
+                    $item = getItemForItemtype($_POST['itemtype']);
                     echo "<script type='text/javascript' >\n";
 
                    //if item have a DC position (reload url to it's rack)

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -100,17 +100,17 @@ class APIXmlrpc extends API
         } elseif ($resource === "getMyEntities") { // get all entities of logged user
             $this->returnResponse($this->getMyEntities($this->parameters));
         } elseif ($resource === "getActiveEntities") { // get curent active entity
-            $this->returnResponse($this->getActiveEntities($this->parameters));
+            $this->returnResponse($this->getActiveEntities());
         } elseif ($resource === "changeActiveProfile") { // change active profile
             $this->returnResponse($this->changeActiveProfile($this->parameters));
         } elseif ($resource === "getMyProfiles") { // get all profiles of current logged user
-            $this->returnResponse($this->getMyProfiles($this->parameters));
+            $this->returnResponse($this->getMyProfiles());
         } elseif ($resource === "getActiveProfile") { // get current active profile
-            $this->returnResponse($this->getActiveProfile($this->parameters));
+            $this->returnResponse($this->getActiveProfile());
         } elseif ($resource === "getFullSession") { // get complete php session
-            $this->returnResponse($this->getFullSession($this->parameters));
+            $this->returnResponse($this->getFullSession());
         } elseif ($resource === "getGlpiConfig") { // get complete php var $CFG_GLPI
-            $this->returnResponse($this->getGlpiConfig($this->parameters));
+            $this->returnResponse($this->getGlpiConfig());
         } elseif ($resource === "getMultipleItems") { // get multiple items (with various itemtype)
             $this->returnResponse($this->getMultipleItems($this->parameters));
         } elseif ($resource === "listSearchOptions") { // list searchOptions of an itemtype

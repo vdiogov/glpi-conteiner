@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -57,6 +57,14 @@ class Item_DeviceSoundCard extends Item_Devices
             'locations_id' => parent::getSpecificities('locations_id'),
             'states_id' => parent::getSpecificities('states_id'),
             'busID'  => parent::getSpecificities('busID')
+        ];
+    }
+
+    public function getImportCriteria(): array
+    {
+        return [
+            'serial' => 'serial',
+            'busID' => 'busID',
         ];
     }
 }

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,7 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Toolbox\Sanitizer;
 use PHPMailer\PHPMailer\PHPMailer;
 
 class NotificationEventMailing extends NotificationEventAbstract
@@ -73,64 +74,52 @@ class NotificationEventMailing extends NotificationEventAbstract
 
     public static function getAdminData()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
-        if (!NotificationMailing::isUserAddressValid($CFG_GLPI['admin_email'])) {
-            return false;
+        $admin = Config::getAdminEmailSender();
+        if ($admin['email'] !== null) {
+            $admin['language'] = $CFG_GLPI['language'];
+
+            $user = new User();
+            if ($user->getFromDBbyEmail($admin['email'])) {
+                $admin['users_id'] = $user->getID();
+            }
+
+            return $admin;
         }
 
-        $admin = [
-            'email'     => $CFG_GLPI['admin_email'],
-            'name'      => $CFG_GLPI['admin_email_name'],
-            'language'  => $CFG_GLPI['language']
-        ];
-
-        $user = new User();
-        if ($user->getFromDBbyEmail($CFG_GLPI['admin_email'])) {
-            $admin['users_id'] = $user->getID();
-        }
-
-        return $admin;
+        return [];
     }
 
 
     public static function getEntityAdminsData($entity)
     {
-        global $DB, $CFG_GLPI;
+        /** @var array $CFG_GLPI */
+        global $CFG_GLPI;
 
-        $iterator = $DB->request([
-            'FROM'   => 'glpi_entities',
-            'WHERE'  => ['id' => $entity]
-        ]);
+        $admin = Config::getAdminEmailSender($entity);
+        if ($admin['email'] !== null) {
+            $admin['language'] = $CFG_GLPI['language'];
 
-        $admins = [];
-
-        foreach ($iterator as $row) {
-            if (NotificationMailing::isUserAddressValid($row['admin_email'])) {
-                $admin = [
-                    'language'  => $CFG_GLPI['language'],
-                    'email'     => $row['admin_email'],
-                    'name'      => $row['admin_email_name']
-                ];
-
-                $user = new User();
-                if ($user->getFromDBbyEmail($row['admin_email'])) {
-                    $admin['users_id'] = $user->getID();
-                }
-                $admins[] = $admin;
+            $user = new User();
+            if ($user->getFromDBbyEmail($admin['email'])) {
+                $admin['users_id'] = $user->getID();
             }
+
+            return [$admin];
         }
 
-        if (count($admins)) {
-            return $admins;
-        } else {
-            return false;
-        }
+        return [];
     }
 
 
     public static function send(array $data)
     {
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
         global $CFG_GLPI, $DB;
 
         $processed = [];
@@ -141,150 +130,214 @@ class NotificationEventMailing extends NotificationEventAbstract
             $current = new QueuedNotification();
             $current->getFromResultSet($row);
 
-            $headers = importArrayFromDB($current->fields['headers']);
-            if (is_array($headers) && count($headers)) {
-                foreach ($headers as $key => $val) {
-                    $mmail->AddCustomHeader("$key: $val");
+            try {
+                $headers = importArrayFromDB($current->fields['headers']);
+                if (is_array($headers) && count($headers)) {
+                    foreach ($headers as $key => $val) {
+                        $mmail->AddCustomHeader("$key: $val");
+                    }
                 }
-            }
 
-           // Add custom header for mail grouping in reader
-            $mmail->AddCustomHeader(
-                str_replace(
-                    [
-                        '%uuid',
-                        '%itemtype',
-                        '%items_id'
-                    ],
-                    [
-                        Config::getUuid('notification'),
-                        $current->fields['itemtype'],
-                        $current->fields['items_id']
-                    ],
-                    "In-Reply-To: <GLPI-%uuid-%itemtype-%items_id>"
-                )
-            );
+                if ($current->fields['event'] === null) {
+                    // Notifications that were pushed in queue before upgrade to GLPI 10.0.8+ have a `null` value in `event` field.
+                    // Build the `In-Reply-To` header as it was done before GLPI 10.0.8.
+                    $mmail->AddCustomHeader(
+                        str_replace(
+                            [
+                                '%uuid',
+                                '%itemtype',
+                                '%items_id'
+                            ],
+                            [
+                                Config::getUuid('notification'),
+                                $current->fields['itemtype'],
+                                $current->fields['items_id']
+                            ],
+                            "In-Reply-To: <GLPI-%uuid-%itemtype-%items_id>"
+                        )
+                    );
+                } elseif (is_a($current->fields['itemtype'], CommonDBTM::class, true)) {
+                    $reference_event = $current->fields['itemtype']::getMessageReferenceEvent($current->fields['event']);
+                    if ($reference_event !== null && $reference_event !== $current->fields['event']) {
+                        // Add `In-Reply-To` and `References` for mail grouping in reader when:
+                        // - there is a reference event (i.e. we want to add current notification to a thread)
+                        // - event is not the reference event (i.e. the thread has already be initiated).
+                        // see https://datatracker.ietf.org/doc/html/rfc2822#section-3.6.4
+                        $email_ref = NotificationTarget::getMessageIdForEvent(
+                            $current->fields['itemtype'],
+                            $current->fields['items_id'],
+                            $reference_event
+                        );
+                        $mmail->AddCustomHeader("In-Reply-To: <{$email_ref}>");
+                        $mmail->AddCustomHeader("References: <{$email_ref}>");
+                    }
+                }
 
-            $mmail->SetFrom($current->fields['sender'], $current->fields['sendername']);
+                $mmail->SetFrom($current->fields['sender'], Sanitizer::decodeHtmlSpecialChars($current->fields['sendername']));
 
-            if ($current->fields['replyto']) {
-                 $mmail->AddReplyTo($current->fields['replyto'], $current->fields['replytoname']);
-            }
-            $mmail->Subject  = $current->fields['name'];
+                if ($current->fields['replyto']) {
+                    $mmail->AddReplyTo($current->fields['replyto'], Sanitizer::decodeHtmlSpecialChars($current->fields['replytoname']));
+                }
+                $mmail->Subject = $current->fields['name'];
 
-            $is_html = !empty($current->fields['body_html']);
+                $is_html = !empty($current->fields['body_html']);
 
-            $documents_ids = [];
-            $documents_to_attach = [];
-            if ($is_html || $CFG_GLPI['attach_ticket_documents_to_mail']) {
-                // Retieve document list if mail is in HTML format (for inline images)
-                // or if documents are attached to mail.
-                $item = getItemForItemtype($current->fields['itemtype']);
-                if (
-                    $item !== false
-                    && (
-                        $current->fields['items_id'] > 0
-                        || ($current->fields['itemtype'] == Entity::class && $current->fields['items_id'] == 0)
-                    )
-                    && $item->getFromDB($current->fields['items_id'])
-                ) {
-                    $doc_crit = [
-                        'items_id' => $current->fields['items_id'],
-                        'itemtype' => $current->fields['itemtype'],
-                    ];
-                    if ($item instanceof CommonITILObject) {
-                        $doc_crit = $item->getAssociatedDocumentsCriteria(true);
-                        if ($is_html) {
-                            // Remove documents having "NO_TIMELINE" position if mail is HTML, as
-                            // these documents corresponds to inlined images.
-                            // If notification is in plain text, they should be kepts as they cannot be rendered in text.
-                            $doc_crit[] = [
-                                'timeline_position'  => ['>', CommonITILObject::NO_TIMELINE]
-                            ];
+                $documents_ids = [];
+                $documents_to_attach = [];
+                if ($is_html || $CFG_GLPI['attach_ticket_documents_to_mail']) {
+                    // Retieve document list if mail is in HTML format (for inline images)
+                    // or if documents are attached to mail.
+                    $item = getItemForItemtype($current->fields['itemtype']);
+                    if (
+                        $item !== false
+                        && (
+                            $current->fields['items_id'] > 0
+                            || ($current->fields['itemtype'] == Entity::class && $current->fields['items_id'] == 0)
+                        )
+                        && $item->getFromDB($current->fields['items_id'])
+                    ) {
+                        $doc_crit = [
+                            'items_id' => $current->fields['items_id'],
+                            'itemtype' => $current->fields['itemtype'],
+                        ];
+                        if ($item instanceof CommonITILObject) {
+                            $doc_crit = $item->getAssociatedDocumentsCriteria(true);
+                            if ($is_html) {
+                                // Remove documents having "NO_TIMELINE" position if mail is HTML, as
+                                // these documents corresponds to inlined images.
+                                // If notification is in plain text, they should be kepts as they cannot be rendered in text.
+                                $doc_crit[] = [
+                                    'timeline_position' => ['>', CommonITILObject::NO_TIMELINE]
+                                ];
+                            }
+                        }
+                        $doc_items_iterator = $DB->request(
+                            [
+                                'SELECT' => ['documents_id'],
+                                'FROM' => Document_Item::getTable(),
+                                'WHERE' => $doc_crit,
+                            ]
+                        );
+                        foreach ($doc_items_iterator as $doc_item) {
+                            $documents_ids[] = $doc_item['documents_id'];
                         }
                     }
-                    $doc_items_iterator = $DB->request(
-                        [
-                            'SELECT' => ['documents_id'],
-                            'FROM'   => Document_Item::getTable(),
-                            'WHERE'  => $doc_crit,
-                        ]
-                    );
-                    foreach ($doc_items_iterator as $doc_item) {
-                         $documents_ids[] = $doc_item['documents_id'];
-                    }
                 }
-            }
 
-            $mmail->isHTML($is_html);
-            if (!$is_html) {
-                $mmail->Body = GLPIMailer::normalizeBreaks($current->fields['body_text']);
-                $documents_to_attach = $documents_ids; // Attach all documents
-            } else {
-                $mmail->Body = '';
-                $inline_docs = [];
-                $doc = new Document();
-                foreach ($documents_ids as $document_id) {
-                    $doc->getFromDB($document_id);
-                   // Add embeded image if tag present in ticket content
-                    if (
-                        preg_match_all(
-                            '/' . preg_quote($doc->fields['tag']) . '/',
-                            $current->fields['body_html'],
-                            $matches,
-                            PREG_PATTERN_ORDER
-                        )
-                    ) {
-                        $image_path = Document::getImage(
-                            GLPI_DOC_DIR . "/" . $doc->fields['filepath'],
-                            'mail'
-                        );
+                $mmail->isHTML($is_html);
+                if (!$is_html) {
+                    $mmail->Body = GLPIMailer::normalizeBreaks($current->fields['body_text']);
+                    $documents_to_attach = $documents_ids; // Attach all documents
+                } else {
+                    $mmail->Body = '';
+                    $inline_docs = [];
+                    foreach ($documents_ids as $document_id) {
+                        $doc = new Document();
+                        if ($doc->getFromDB($document_id) === false) {
+                            trigger_error(sprintf('Unable to load document %d.', $document_id), E_USER_WARNING);
+                            continue;
+                        }
+                        // Add embeded image if tag present in ticket content
                         if (
-                            $mmail->AddEmbeddedImage(
-                                $image_path,
-                                $doc->fields['tag'],
-                                $doc->fields['filename'],
-                                'base64',
-                                $doc->fields['mime']
+                            preg_match_all(
+                                '/' . preg_quote($doc->fields['tag']) . '/',
+                                $current->fields['body_html'],
+                                $matches,
+                                PREG_PATTERN_ORDER
                             )
                         ) {
-                            $inline_docs[$document_id] = $doc->fields['tag'];
+                            // Make sure file still exists
+                            if (!file_exists(GLPI_DOC_DIR . "/" . $doc->fields['filepath'])) {
+                                trigger_error('Failed to add document ' . $doc->fields['filepath'] . ' to mail: file not found', E_USER_WARNING);
+                                continue;
+                            }
+                            $image_path = Document::getImage(
+                                GLPI_DOC_DIR . "/" . $doc->fields['filepath'],
+                                'mail'
+                            );
+                            if (
+                                $mmail->AddEmbeddedImage(
+                                    $image_path,
+                                    $doc->fields['tag'],
+                                    $doc->fields['filename'],
+                                    'base64',
+                                    $doc->fields['mime']
+                                )
+                            ) {
+                                $inline_docs[$document_id] = $doc->fields['tag'];
+                            }
+                        } else {
+                            // Attach only documents that are not inlined images
+                            $documents_to_attach[] = $document_id;
                         }
-                    } else {
-                       // Attach only documents that are not inlined images
-                        $documents_to_attach[] = $document_id;
                     }
-                }
 
-               // manage inline images (and not added as documents in object)
-                $matches = [];
-                if (
-                    preg_match_all(
-                        "/<img[^>]*src=(\"|')[^\"']*document\.send\.php\?docid=([0-9]+)[^\"']*(\"|')[^<]*>/",
-                        $current->fields['body_html'],
-                        $matches
-                    )
-                ) {
-                    if (isset($matches[2])) {
-                        foreach ($matches[2] as $pos => $docID) {
-                            if (!in_array($docID, $inline_docs)) {
-                                $doc->getFromDB($docID);
+                    // manage inline images (and not added as documents in object)
+                    $matches = [];
+                    if (
+                        preg_match_all(
+                            "/<img[^>]*src=(\"|')[^\"']*document\.send\.php\?docid=([0-9]+)[^\"']*(\"|')[^<]*>/",
+                            $current->fields['body_html'],
+                            $matches
+                        )
+                    ) {
+                        if (isset($matches[2])) {
+                            foreach ($matches[2] as $pos => $docID) {
+                                if (in_array($docID, $inline_docs)) {
+                                    // Already in mapping
+                                    continue;
+                                }
+
+                                $doc = new Document();
+                                if ($doc->getFromDB($docID) === false) {
+                                    $inline_docs[$docID] = 'notfound'; // Add mapping entry to ensure that src is converted to an absolute URL
+                                    trigger_error(sprintf('Unable to load document %d.', $docID), E_USER_WARNING);
+                                    continue;
+                                }
 
                                 //find width
-                                $width = null;
+                                $custom_width = null;
                                 if (preg_match("/width=[\"|'](\d+)(\.\d+)?[\"|']/", $matches[0][$pos], $wmatches)) {
-                                    $width = intval($wmatches[1]);
+                                    $custom_width = intval($wmatches[1]);
                                 }
-                                $height = null;
+                                $custom_height = null;
                                 if (preg_match("/height=[\"|'](\d+)(\.\d+)?[\"|']/", $matches[0][$pos], $hmatches)) {
-                                    $height = intval($hmatches[1]);
+                                    $custom_height = intval($hmatches[1]);
+                                }
+
+                                // Make sure file still exists
+                                if (!file_exists(GLPI_DOC_DIR . "/" . $doc->fields['filepath'])) {
+                                    trigger_error('Failed to add document ' . $doc->fields['filepath'] . ' to mail: file not found', E_USER_WARNING);
+                                    continue;
+                                }
+
+                                $img_infos = getimagesize(GLPI_DOC_DIR . "/" . $doc->fields['filepath']);
+
+                                if (!$img_infos) {
+                                    // Failure to read image size, skip to avoid a divide by zero exception
+                                    continue;
+                                }
+
+                                $initial_width = $img_infos[0];
+                                $initial_height = $img_infos[1];
+
+                                if ($custom_width !== null && $custom_height === null) {
+                                    //compute height if needed
+                                    $custom_height = $initial_height * $custom_width / $initial_width;
+                                } elseif ($custom_height !== null && $custom_width === null) {
+                                    //compute width if needed
+                                    $custom_width = $initial_width * $custom_height / $initial_height;
+                                } elseif ($custom_height === null && $custom_width === null) {
+                                    //if both are null keep initial size
+                                    $custom_width = $initial_width;
+                                    $custom_height = $initial_height;
                                 }
 
                                 $image_path = Document::getImage(
                                     GLPI_DOC_DIR . "/" . $doc->fields['filepath'],
                                     'mail',
-                                    $width,
-                                    $height
+                                    $custom_width,
+                                    $custom_height
                                 );
                                 if (
                                     $mmail->AddEmbeddedImage(
@@ -300,91 +353,50 @@ class NotificationEventMailing extends NotificationEventAbstract
                             }
                         }
                     }
+
+                    // replace img[src] by cid:tag in html content
+                    // replace a[href] by absolute URL
+                    foreach ($inline_docs as $docID => $tag) {
+                        $current->fields['body_html'] = preg_replace(
+                            [
+                                '/src=["\'][^"\']*document\.send\.php\?docid=' . $docID . '(&[^"\']+)?["\']/',
+                                '/href=["\'][^"\']*document\.send\.php\?docid=' . $docID . '(&[^"\']+)?["\']/',
+                            ],
+                            [
+                                'src="cid:' . $tag . '"',
+                                'href="' . $CFG_GLPI['url_base'] . '/front/document.send.php?docid=' . $docID . '$1"',
+                            ],
+                            $current->fields['body_html']
+                        );
+                    }
+
+                    $mmail->Body = GLPIMailer::normalizeBreaks($current->fields['body_html']);
+                    $mmail->AltBody = GLPIMailer::normalizeBreaks($current->fields['body_text']);
                 }
 
-               // replace img[src] by cid:tag in html content
-               // replace a[href] by absolute URL
-                foreach ($inline_docs as $docID => $tag) {
-                    $current->fields['body_html'] = preg_replace(
-                        [
-                            '/src=["\'][^"\']*document\.send\.php\?docid=' . $docID . '(&[^"\']+)?["\']/',
-                            '/href=["\'][^"\']*document\.send\.php\?docid=' . $docID . '(&[^"\']+)?["\']/',
-                        ],
-                        [
-                            'src="cid:' . $tag . '"',
-                            'href="' . $CFG_GLPI['url_base'] . '/front/document.send.php?docid=' . $docID . '$1"',
-                        ],
-                        $current->fields['body_html']
-                    );
+                self::attachDocuments($mmail, $documents_to_attach);
+
+                $recipient = $current->getField('recipient');
+                if (defined('GLPI_FORCE_MAIL')) {
+                    //force recipient to configured email address
+                    $recipient = GLPI_FORCE_MAIL;
+                    //add original email addess to message body
+                    $text = sprintf(__('Original email address was %1$s'), $current->getField('recipient'));
+                    $mmail->Body .= "<br/>$text";
+                    $mmail->AltBody .= $text;
                 }
 
-                $mmail->Body    = GLPIMailer::normalizeBreaks($current->fields['body_html']);
-                $mmail->AltBody = GLPIMailer::normalizeBreaks($current->fields['body_text']);
+                $mmail->AddAddress($recipient, Sanitizer::decodeHtmlSpecialChars($current->fields['recipientname']));
+
+                if (!empty($current->fields['messageid'])) {
+                    $mmail->MessageID = "<" . $current->fields['messageid'] . ">";
+                }
+            } catch (\Throwable $e) {
+                self::handleFailedSend($current, $e->getMessage());
             }
-
-            self::attachDocuments($mmail, $documents_to_attach);
-
-            $recipient = $current->getField('recipient');
-            if (defined('GLPI_FORCE_MAIL')) {
-               //force recipient to configured email address
-                $recipient = GLPI_FORCE_MAIL;
-               //add original email addess to message body
-                $text = sprintf(__('Original email address was %1$s'), $current->getField('recipient'));
-                $mmail->Body      .= "<br/>$text";
-                $mmail->AltBody   .= $text;
-            }
-
-            $mmail->AddAddress($recipient, $current->fields['recipientname']);
-
-            if (!empty($current->fields['messageid'])) {
-                $mmail->MessageID = "<" . $current->fields['messageid'] . ">";
-            }
-
-            $messageerror = __('Error in sending the email');
 
             if (!$mmail->Send()) {
-                Session::addMessageAfterRedirect($messageerror . "<br/>" . $mmail->ErrorInfo, true, ERROR);
-
-                $retries = $CFG_GLPI['smtp_max_retries'] - $current->fields['sent_try'];
-                Toolbox::logInFile(
-                    "mail-error",
-                    sprintf(
-                        __('%1$s. Message: %2$s, Error: %3$s'),
-                        sprintf(
-                            __('Warning: an email was undeliverable to %s with %d retries remaining'),
-                            $current->fields['recipient'],
-                            $retries
-                        ),
-                        $current->fields['name'],
-                        $mmail->ErrorInfo . "\n"
-                    )
-                );
-
-                if ($retries <= 0) {
-                     Toolbox::logInFile(
-                         "mail-error",
-                         sprintf(
-                             __('%1$s: %2$s'),
-                             sprintf(
-                                 __('Fatal error: giving up delivery of email to %s'),
-                                 $current->fields['recipient']
-                             ),
-                             $current->fields['name'] . "\n"
-                         )
-                     );
-                     $current->delete(['id' => $current->fields['id']]);
-                }
-
-                $mmail->ClearAddresses();
-                $input = [
-                    'id'        => $current->fields['id'],
-                    'sent_try'  => $current->fields['sent_try'] + 1
-                ];
-
-                if ($CFG_GLPI["smtp_retry_time"] > 0) {
-                    $input['send_time'] = date("Y-m-d H:i:s", strtotime('+' . $CFG_GLPI["smtp_retry_time"] . ' minutes')); //Delay X minutes to try again
-                }
-                $current->update($input);
+                self::handleFailedSend($current, $mmail->ErrorInfo);
             } else {
                //TRANS to be written in logs %1$s is the to email / %2$s is the subject of the mail
                 Toolbox::logInFile(
@@ -411,6 +423,61 @@ class NotificationEventMailing extends NotificationEventAbstract
     }
 
     /**
+     * Handle a failure when trying to send an email
+     * @param QueuedNotification $notification The notification that failed
+     * @param string $error The error message to log
+     * @return void
+     */
+    private static function handleFailedSend(QueuedNotification $notification, string $error): void
+    {
+        /** @var array $CFG_GLPI */
+        global $CFG_GLPI;
+
+        $messageerror = __('Error in sending the email');
+        Session::addMessageAfterRedirect($messageerror . "<br/>" . $error, true, ERROR);
+
+        $retries = $CFG_GLPI['smtp_max_retries'] - $notification->fields['sent_try'];
+        Toolbox::logInFile(
+            "mail-error",
+            sprintf(
+                __('%1$s. Message: %2$s, Error: %3$s'),
+                sprintf(
+                    __('Warning: an email was undeliverable to %s with %d retries remaining'),
+                    $notification->fields['recipient'],
+                    $retries
+                ),
+                $notification->fields['name'],
+                $error . "\n"
+            )
+        );
+
+        if ($retries <= 0) {
+            Toolbox::logInFile(
+                "mail-error",
+                sprintf(
+                    __('%1$s: %2$s'),
+                    sprintf(
+                        __('Fatal error: giving up delivery of email to %s'),
+                        $notification->fields['recipient']
+                    ),
+                    $notification->fields['name'] . "\n"
+                )
+            );
+            $notification->delete(['id' => $notification->fields['id']]);
+        }
+
+        $input = [
+            'id'        => $notification->fields['id'],
+            'sent_try'  => $notification->fields['sent_try'] + 1
+        ];
+
+        if ($CFG_GLPI["smtp_retry_time"] > 0) {
+            $input['send_time'] = date("Y-m-d H:i:s", strtotime('+' . $CFG_GLPI["smtp_retry_time"] . ' minutes')); //Delay X minutes to try again
+        }
+        $notification->update($input);
+    }
+
+    /**
      * Attach documents to message.
      * Documents will not be attached if configuration says they should not be.
      *
@@ -421,6 +488,7 @@ class NotificationEventMailing extends NotificationEventAbstract
      */
     private static function attachDocuments(GLPIMailer $mmail, array $documents_ids)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!$CFG_GLPI['attach_ticket_documents_to_mail']) {
@@ -429,7 +497,10 @@ class NotificationEventMailing extends NotificationEventAbstract
 
         $document = new Document();
         foreach ($documents_ids as $document_id) {
-            $document->getFromDB($document_id);
+            if ($document->getFromDB($document_id) === false) {
+                trigger_error(sprintf('Unable to load document %d.', $document_id), E_USER_WARNING);
+                continue;
+            }
             $path = GLPI_DOC_DIR . "/" . $document->fields['filepath'];
             if (Document::isImage($path)) {
                 $path = Document::getImage(

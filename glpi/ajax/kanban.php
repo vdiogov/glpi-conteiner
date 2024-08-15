@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -39,6 +39,9 @@ use Glpi\Features\Teamwork;
 use Glpi\Http\Response;
 use Glpi\Toolbox\Sanitizer;
 
+/** @var array $_UPOST */
+global $_UPOST;
+
 $AJAX_INCLUDE = 1;
 
 include('../inc/includes.php');
@@ -48,16 +51,17 @@ Html::header_nocache();
 
 Session::checkLoginUser();
 
-/** @global array $_UPOST */
-
 if (!isset($_REQUEST['action'])) {
     Response::sendError(400, "Missing action parameter", Response::CONTENT_TYPE_TEXT_HTML);
 }
 $action = $_REQUEST['action'];
 
-$nonkanban_actions = ['update', 'bulk_add_item', 'add_item', 'move_item', 'show_card_edit_form', 'delete_item', 'load_item_panel',
-    'add_teammember', 'delete_teammember'
+$nonkanban_actions = ['update', 'bulk_add_item', 'add_item', 'move_item', 'delete_item', 'load_item_panel',
+    'add_teammember', 'delete_teammember', 'restore_item', 'load_teammember_form',
 ];
+
+$itemtype = null;
+$item = null;
 if (isset($_REQUEST['itemtype'])) {
     if (!in_array($_REQUEST['action'], $nonkanban_actions) && !Toolbox::hasTrait($_REQUEST['itemtype'], Kanban::class)) {
        // Bad request
@@ -70,7 +74,7 @@ if (isset($_REQUEST['itemtype'])) {
 }
 
 // Rights Checks
-if (isset($itemtype)) {
+if ($item !== null) {
     if (in_array($action, ['refresh', 'get_switcher_dropdown', 'get_column', 'load_item_panel'])) {
         if (!$item->canView()) {
            // Missing rights
@@ -79,16 +83,15 @@ if (isset($itemtype)) {
         }
     }
     if (in_array($action, ['update', 'load_item_panel', 'delete_teammember'])) {
-        $item->getFromDB($_REQUEST['items_id']);
-        if (!$item->canUpdateItem()) {
+        if (!$item->can($_REQUEST['items_id'], UPDATE)) {
             // Missing rights
             http_response_code(403);
             return;
         }
     }
-    if (in_array($action, ['add_teammember'])) {
+    if (in_array($action, ['load_teammember_form', 'add_teammember'])) {
         $item->getFromDB($_REQUEST['items_id']);
-        $can_assign = method_exists($item, 'canAssign') ? $item->canAssign() : $item->canUpdateItem();
+        $can_assign = method_exists($item, 'canAssign') ? $item->canAssign() : $item->can($_REQUEST['items_id'], UPDATE);
         if (!$can_assign) {
            // Missing rights
             http_response_code(403);
@@ -106,6 +109,14 @@ if (isset($itemtype)) {
         $maybe_deleted = $item->maybeDeleted();
         if (($maybe_deleted && !$item::canDelete()) && (!$maybe_deleted && $item::canPurge())) {
            // Missing rights
+            http_response_code(403);
+            return;
+        }
+    }
+    if ($action === 'restore_item') {
+        $maybe_deleted = $item->maybeDeleted();
+        if (($maybe_deleted && !$item::canDelete())) {
+            // Missing rights
             http_response_code(403);
             return;
         }
@@ -131,14 +142,36 @@ if (($_POST['action'] ?? null) === 'update') {
     ]);
 } else if (($_POST['action'] ?? null) === 'add_item') {
     $checkParams(['inputs']);
-    $item = new $itemtype();
+
+    $item = getItemForItemtype($itemtype);
+    if (!$item) {
+        http_response_code(400);
+        return;
+    }
+
     $inputs = [];
     parse_str($_UPOST['inputs'], $inputs);
+    $inputs = Sanitizer::sanitize($inputs);
 
-    $item->add(Sanitizer::sanitize($inputs));
+    if (!$item->can(-1, CREATE, $inputs)) {
+        http_response_code(403);
+        return;
+    }
+
+    $result = $item->add($inputs);
+    if (!$result) {
+        http_response_code(400);
+        return;
+    }
 } else if (($_POST['action'] ?? null) === 'bulk_add_item') {
     $checkParams(['inputs']);
-    $item = new $itemtype();
+
+    $item = getItemForItemtype($itemtype);
+    if (!$item) {
+        http_response_code(400);
+        return;
+    }
+
     $inputs = [];
     parse_str($_UPOST['inputs'], $inputs);
 
@@ -148,14 +181,17 @@ if (($_POST['action'] ?? null) === 'update') {
         foreach ($bulk_item_list as $item_entry) {
             $item_entry = trim($item_entry);
             if (!empty($item_entry)) {
-                $item->add(Sanitizer::sanitize($inputs + ['name' => $item_entry, 'content' => '']));
+                $item_input = Sanitizer::sanitize($inputs + ['name' => $item_entry, 'content' => '']);
+                if ($item->can(-1, CREATE, $item_input)) {
+                    $item->add($item_input);
+                }
             }
         }
     }
 } else if (($_POST['action'] ?? null) === 'move_item') {
     $checkParams(['card', 'column', 'position', 'kanban']);
     /** @var Kanban|CommonDBTM $kanban */
-    $kanban = new $_POST['kanban']['itemtype']();
+    $kanban = getItemForItemtype($_POST['kanban']['itemtype']);
     $can_move = $kanban->canOrderKanbanCard($_POST['kanban']['items_id']);
     if ($can_move) {
         Item_Kanban::moveCard(
@@ -234,19 +270,11 @@ if (($_POST['action'] ?? null) === 'update') {
     header("Content-Type: application/json; charset=UTF-8", true);
     echo json_encode($itemtype::getAllKanbanColumns($_REQUEST['column_field']));
 } else if ($_REQUEST['action'] === 'get_column') {
+    Session::writeClose();
     $checkParams(['column_id', 'column_field', 'items_id']);
     header("Content-Type: application/json; charset=UTF-8", true);
     $column = $itemtype::getKanbanColumns($_REQUEST['items_id'], $_REQUEST['column_field'], [$_REQUEST['column_id']]);
     echo json_encode($column, JSON_FORCE_OBJECT);
-} else if ($_REQUEST['action'] === 'show_card_edit_form') {
-    $checkParams(['card']);
-    $item->getFromDB($_REQUEST['card']);
-    if ($item->canViewItem() && $item->canUpdateItem()) {
-        $item->showForm($_REQUEST['card']);
-    } else {
-        http_response_code(403);
-        return;
-    }
 } else if (($_POST['action'] ?? null) === 'delete_item') {
     $checkParams(['items_id']);
     $item->getFromDB($_POST['items_id']);
@@ -258,10 +286,21 @@ if (($_POST['action'] ?? null) === 'update') {
         http_response_code(403);
         return;
     }
+} else if (($_POST['action'] ?? null) === 'restore_item') {
+    $checkParams(['items_id']);
+    $item->getFromDB($_POST['items_id']);
+    // Check if the item can be restored
+    $maybe_deleted = $item->maybeDeleted();
+    if (($maybe_deleted && $item->canDeleteItem())) {
+        $item->restore(['id' => $_POST['items_id']]);
+    } else {
+        http_response_code(403);
+        return;
+    }
 } else if (($_POST['action'] ?? null) === 'add_teammember') {
     $checkParams(['itemtype_teammember', 'items_id_teammember']);
     $item->addTeamMember($_POST['itemtype_teammember'], (int) $_POST['items_id_teammember'], [
-        'role'   => (int) $_POST['role']
+        'role' => $_POST['role']
     ]);
 } else if (($_POST['action'] ?? null) === 'delete_teammember') {
     $checkParams(['itemtype_teammember', 'items_id_teammember']);
@@ -275,6 +314,13 @@ if (($_POST['action'] ?? null) === 'update') {
             'item_fields'  => $item->fields,
             'team'         => Toolbox::hasTrait($item, Teamwork::class) ? $item->getTeam() : []
         ]);
+    } else {
+        http_response_code(400);
+        return;
+    }
+} else if (($_REQUEST['action'] ?? null) === 'load_teammember_form') {
+    if (isset($itemtype, $item) && Toolbox::hasTrait($_REQUEST['itemtype'], Teamwork::class)) {
+        echo $item::getTeamMemberForm($item, $itemtype);
     } else {
         http_response_code(400);
         return;

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -37,6 +37,7 @@ namespace Glpi\Marketplace;
 
 use CommonGLPI;
 use Config;
+use Glpi\Application\View\TemplateRenderer;
 use Glpi\Marketplace\Api\Plugins as PluginsApi;
 use GLPINetwork;
 use Html;
@@ -84,6 +85,7 @@ class View extends CommonGLPI
 
     public static function getSearchURL($full = true)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $dir = ($full ? $CFG_GLPI['root_doc'] : '');
@@ -139,6 +141,7 @@ class View extends CommonGLPI
      */
     public static function checkRegistrationStatus()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $messages   = [];
@@ -638,6 +641,10 @@ HTML;
      */
     public static function getButtons(string $plugin_key = ""): string
     {
+        /**
+         * @var array $CFG_GLPI
+         * @var array $PLUGIN_HOOKS
+         */
         global $CFG_GLPI, $PLUGIN_HOOKS;
 
         $plugin_inst        = new Plugin();
@@ -733,7 +740,7 @@ HTML;
 
                     // Use "marketplace.download.php" proxy if archive is downloadable from GLPI marketplace plugins API
                     // as this API will refuse to serve the archive if registration key is not set in headers.
-                    $download_url = str_starts_with($plugin_data['installation_url'], GLPI_MARKETPLACE_PLUGINS_API_URI)
+                    $download_url = parse_url($plugin_data['installation_url'], PHP_URL_HOST) === parse_url(GLPI_MARKETPLACE_PLUGINS_API_URI, PHP_URL_HOST)
                         ? $CFG_GLPI['root_doc'] . '/front/marketplace.download.php?key=' . $plugin_key
                         : $plugin_data['installation_url'];
 
@@ -813,11 +820,20 @@ HTML;
                 }
             }
 
-            $buttons .= "<button class='modify_plugin'
-                                 data-action='uninstall_plugin'
-                                 title='" . __s("Uninstall") . "'>
-                    <i class='ti ti-folder-x'></i>
-                </button>";
+            $buttons .= TemplateRenderer::getInstance()->render('components/plugin_uninstall_modal.html.twig', [
+                'plugin_name' => $plugin_inst->getField('name'),
+                'modal_id' => 'uninstallModal' . $plugin_inst->getField('directory'),
+                'open_btn' => '<button data-bs-toggle="modal"
+                                       data-bs-target="#uninstallModal' . $plugin_inst->getField('directory') . '"
+                                       title="' . __s('Uninstall') . '">
+                                   <i class="ti ti-folder-x"></i>
+                               </button>',
+                'uninstall_btn' => '<a href="#" class="btn btn-danger w-100 modify_plugin"
+                                       data-action="uninstall_plugin"
+                                       data-bs-dismiss="modal">
+                                       ' . _x("button", "Uninstall") . '
+                                   </a>',
+            ]);
 
             if (!strlen($error) && $is_actived && $config_page) {
                 $plugin_dir = Plugin::getWebDir($plugin_key, true);
@@ -915,6 +931,7 @@ HTML;
      */
     public static function getLocalizedDescription(array $plugin = [], string $version = 'short_description'): string
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $userlang = $CFG_GLPI['languages'][$_SESSION['glpilanguage']][3] ?? "en";
@@ -1014,6 +1031,7 @@ HTML;
      */
     public static function showFeatureSwitchDialog()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (isset($_POST['marketplace_replace'])) {

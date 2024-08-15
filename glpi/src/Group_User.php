@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -78,6 +78,7 @@ class Group_User extends CommonDBRelation
      **/
     public static function getUserGroups($users_id, $condition = [])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $groups = [];
@@ -124,6 +125,7 @@ class Group_User extends CommonDBRelation
      **/
     public static function getGroupUsers($groups_id, $condition = [])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $users = [];
@@ -165,6 +167,7 @@ class Group_User extends CommonDBRelation
      **/
     public static function showForUser(User $user)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $ID = $user->fields['id'];
@@ -199,11 +202,17 @@ class Group_User extends CommonDBRelation
             echo "<input type='hidden' name='users_id' value='$ID'>";
 
             $params = [
-                'used'      => $used,
                 'condition' => [
                     'is_usergroup' => 1,
                 ] + getEntitiesRestrictCriteria(Group::getTable(), '', '', true)
             ];
+
+            if (count($used) > 0) {
+                $params['condition'][] = [
+                    'NOT' => [Group::getTable() . '.id' => $used]
+                ];
+            }
+
             Group::dropdown($params);
             echo "</td><td>" . _n('Manager', 'Managers', 1) . "</td><td>";
             Dropdown::showYesNo('is_manager');
@@ -379,6 +388,7 @@ class Group_User extends CommonDBRelation
         $tree = 0,
         bool $check_entities = true
     ) {
+        /** @var \DBmysql $DB */
         global $DB;
 
         // Entity restriction for this group, according to user allowed entities
@@ -472,6 +482,7 @@ class Group_User extends CommonDBRelation
      **/
     public static function showForGroup(Group $group)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $ID = $group->getID();
@@ -601,7 +612,9 @@ class Group_User extends CommonDBRelation
                 echo "\n<tr class='tab_bg_" . ($user->isDeleted() ? '1_2' : '1') . "'>";
                 if ($canedit) {
                     echo "<td width='10'>";
-                    Html::showMassiveActionCheckBox(__CLASS__, $data["linkid"]);
+                    if ($user->canUpdateItem()) {
+                        Html::showMassiveActionCheckBox(__CLASS__, $data["linkid"]);
+                    }
                     echo "</td>";
                 }
                 echo "<td>" . $user->getLink();
@@ -855,7 +868,10 @@ class Group_User extends CommonDBRelation
 
     public function post_addItem()
     {
+        /** @var \DBmysql $DB */
         global $DB;
+
+        parent::post_addItem();
 
        // add new user to plannings
         $groups_id  = $this->fields['groups_id'];
@@ -914,7 +930,10 @@ class Group_User extends CommonDBRelation
 
     public function post_purgeItem()
     {
+        /** @var \DBmysql $DB */
         global $DB;
+
+        parent::post_purgeItem();
 
        // remove user from plannings
         $groups_id  = $this->fields['groups_id'];

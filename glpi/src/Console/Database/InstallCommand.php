@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -38,6 +38,7 @@ namespace Glpi\Console\Database;
 use DBConnection;
 use DBmysql;
 use Glpi\Cache\CacheManager;
+use Glpi\Console\Command\ConfigurationCommandInterface;
 use Glpi\Console\Traits\TelemetryActivationTrait;
 use Glpi\System\Requirement\DbConfiguration;
 use GLPIKey;
@@ -47,7 +48,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
 use Toolbox;
 
-class InstallCommand extends AbstractConfigureCommand
+class InstallCommand extends AbstractConfigureCommand implements ConfigurationCommandInterface
 {
     use TelemetryActivationTrait;
 
@@ -91,7 +92,7 @@ class InstallCommand extends AbstractConfigureCommand
 
         parent::configure();
 
-        $this->setName('glpi:database:install');
+        $this->setName('database:install');
         $this->setAliases(['db:install']);
         $this->setDescription('Install database schema');
 
@@ -116,6 +117,7 @@ class InstallCommand extends AbstractConfigureCommand
     protected function initialize(InputInterface $input, OutputInterface $output)
     {
 
+        /** @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE */
         global $GLPI_CACHE;
         $GLPI_CACHE = (new CacheManager())->getInstallerCacheInstance(); // Use dedicated "installer" cache
 
@@ -172,9 +174,10 @@ class InstallCommand extends AbstractConfigureCommand
         }
 
         if (!$this->isDbAlreadyConfigured() || $input->getOption('reconfigure')) {
-            $this->configureDatabase($input, $output, false, true, false, false, false);
+            $this->configureDatabase($input, $output, false);
 
             // Ensure global $DB is updated (used by GLPIKey)
+            /** @var \DBmysql $DB */
             global $DB;
             $DB = $this->db;
 
@@ -186,6 +189,7 @@ class InstallCommand extends AbstractConfigureCommand
             $db_pass     = $input->getOption('db-password');
         } else {
            // Ask to confirm installation based on existing configuration.
+            /** @var \DBmysql $DB */
             global $DB;
 
            // $DB->dbhost can be array when using round robin feature
@@ -224,6 +228,7 @@ class InstallCommand extends AbstractConfigureCommand
             return self::ERROR_CANNOT_CREATE_ENCRYPTION_KEY_FILE;
         }
 
+        mysqli_report(MYSQLI_REPORT_OFF);
         $mysqli = new \mysqli();
         if (intval($db_port) > 0) {
            // Network port
@@ -318,6 +323,17 @@ class InstallCommand extends AbstractConfigureCommand
         $this->handTelemetryActivation($input, $output);
 
         return 0; // Success
+    }
+
+    public function getConfigurationFilesToUpdate(InputInterface $input): array
+    {
+        $config_files_to_update = [
+            'glpicrypt.key', // key is regenerated everytime
+        ];
+        if (!$this->isDbAlreadyConfigured() || $input->hasParameterOption('--reconfigure', true)) {
+            $config_files_to_update[] = 'config_db.php';
+        }
+        return $config_files_to_update;
     }
 
     /**

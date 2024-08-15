@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,21 +35,25 @@
 
 use Glpi\Inventory\Conf;
 
-include('../inc/includes.php');
+$SECURITY_STRATEGY = 'no_check'; // may allow unauthenticated access, for public FAQ images
 
-if (!$CFG_GLPI["use_public_faq"]) {
-    Session::checkLoginUser();
-}
+include('../inc/includes.php');
 
 $doc = new Document();
 
-if (isset($_GET['docid'])) { // docid for document
+if (isset($_GET['docid'])) {
+    // Get file corresponding to given Document id.
+
+    // Allow anonymous access at this point to be able to serve documents related to
+    // public FAQ.
+    // Document::canViewFile() will do appropriate checks depending on GLPI configuration.
+
     if (!$doc->getFromDB($_GET['docid'])) {
         Html::displayErrorAndDie(__('Unknown file'), true);
     }
 
     if (!file_exists(GLPI_DOC_DIR . "/" . $doc->fields['filepath'])) {
-        Html::displayErrorAndDie(__('File not found'), true); // Not found
+        Html::displayErrorAndDie(sprintf(__('File %s not found.'), $doc->fields['filename']), true); // Not found
     } else if ($doc->canViewFile($_GET)) {
         if (
             $doc->fields['sha1sum']
@@ -63,7 +67,11 @@ if (isset($_GET['docid'])) { // docid for document
     } else {
         Html::displayErrorAndDie(__('Unauthorized access to this file'), true); // No right
     }
-} else if (isset($_GET["file"])) { // for other file
+} else if (isset($_GET["file"])) {
+    // Get file corresponding to given path.
+
+    Session::checkLoginUser(); // Do not allow anonymous access
+
     $splitter = explode("/", $_GET["file"], 2);
     $mime = null;
     if (count($splitter) == 2) {
@@ -84,11 +92,9 @@ if (isset($_GET['docid'])) { // docid for document
             }
         }
 
-        if ($splitter[0] == "_inventory") {
+        if ($splitter[0] == "_inventory" && Session::haveRight(Conf::$rightname, READ)) {
             $iconf = new Conf();
             if ($iconf->isInventoryFile(GLPI_INVENTORY_DIR . '/' . $splitter[1])) {
-               // Can use expires header as picture file path changes when picture changes.
-                $expires_headers = true;
                 $send = GLPI_INVENTORY_DIR . '/' . $splitter[1];
 
                 $finfo = new finfo(FILEINFO_MIME_TYPE);

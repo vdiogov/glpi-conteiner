@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -56,6 +56,7 @@
  *                                  }, {
  *                                     ...
  *                                  }]
+ * @param {boolean} dialog.bs_focus - Data-bs-focus value for the modal
  */
 var glpi_html_dialog = function({
     title       = "",
@@ -69,6 +70,7 @@ var glpi_html_dialog = function({
     show        = () => {},
     close       = () => {},
     buttons     = [],
+    bs_focus    = true,
 } = {}) {
     if (buttons.length > 0) {
         var buttons_html = "";
@@ -100,7 +102,9 @@ var glpi_html_dialog = function({
       </div>`;
     }
 
-    var modal = `<div class="modal fade ${modalclass}" id="${id}" role="dialog">';
+    const data_bs_focus = !bs_focus ? 'data-bs-focus="false"' : '';
+
+    var modal = `<div class="modal fade ${modalclass}" id="${id}" role="dialog" ${data_bs_focus}>
          <div class="modal-dialog ${dialogclass}">
             <div class="modal-content">
                <div class="modal-header">
@@ -140,6 +144,10 @@ var glpi_html_dialog = function({
         // call close event
         close(event);
 
+        if ($('div.modal.show').length === 0) {
+            $('div.modal-backdrop').remove();
+        }
+
         // remove html on modal close
         $('#'+id).remove();
     });
@@ -175,6 +183,7 @@ var glpi_html_dialog = function({
  *                                  }, {
  *                                     ...
  *                                  }]
+ * @param {boolean} dialog.bs_focus - Data-bs-focus value for the modal
  */
 var glpi_ajax_dialog = function({
     url         = "",
@@ -192,6 +201,7 @@ var glpi_ajax_dialog = function({
     show        = () => {},
     close       = () => {},
     buttons     = [],
+    bs_focus    = true,
 } = {}) {
     if (url.length == 0) {
         return;
@@ -218,6 +228,7 @@ var glpi_ajax_dialog = function({
                 buttons: buttons,
                 show: show,
                 close: close,
+                bs_focus: bs_focus
             });
         }
     }).done(function(data) {
@@ -334,10 +345,10 @@ const glpi_toast = (title, message, css_class, options = {}) => {
         animation_extra_classes: 'animate__delay-2s animate__slow'
     }, options);
 
-    const animation_classes = options.animated ? `animate_animated ${options.animation} ${options.animation_extra_classes}` : '';
+    const animation_classes = options.animated ? `animate__animated ${options.animation} ${options.animation_extra_classes}` : '';
     const html = `<div class='toast-container bottom-0 end-0 p-3 messages_after_redirect'>
-      <div id='toast_js_${toast_id}' class='toast ${css_class} ${animation_classes}' role='alert' aria-live='assertive' aria-atomic='true'>
-         <div class='toast-header'>
+      <div id='toast_js_${toast_id}' class='toast ${animation_classes}' role='alert' aria-live='assertive' aria-atomic='true'>
+         <div class='toast-header ${css_class}'>
             <strong class='me-auto'>${title}</strong>
             <button type='button' class='btn-close' data-bs-dismiss='toast' aria-label='${__('Close')}'></button>
          </div>

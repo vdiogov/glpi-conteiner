@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -41,5 +41,5 @@ if (!isset($_GET['itemtype']) || !class_exists($_GET['itemtype'])) {
     );
 }
 
-$dropdown = new $_GET['itemtype']();
+$dropdown = getItemForItemtype($_GET['itemtype']);
 include(GLPI_ROOT . "/front/dropdown.common.form.php");

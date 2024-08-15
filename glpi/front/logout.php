@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -37,19 +37,19 @@
  * @since 0.85
  */
 
+/** @var array $CFG_GLPI */
+global $CFG_GLPI;
+
+$SECURITY_STRATEGY = 'no_check';
+
 include('../inc/includes.php');
 
-//@session_start();
-
-Session::destroy();
-
-//Remove cookie to allow new login
-Auth::setRememberMeCookie('');
 
 if (
     $CFG_GLPI["ssovariables_id"] > 0
     && strlen($CFG_GLPI['ssologout_url']) > 0
 ) {
+    Session::cleanOnLogout();
     Html::redirect($CFG_GLPI["ssologout_url"]);
 }
 
@@ -59,13 +59,33 @@ if (
     && $_SESSION["glpiauthtype"] == Auth::CAS
     && Toolbox::canUseCAS()
 ) {
-    phpCAS::client(
-        CAS_VERSION_2_0,
-        $CFG_GLPI["cas_host"],
-        intval($CFG_GLPI["cas_port"]),
-        $CFG_GLPI["cas_uri"],
-        false
-    );
+    // Adapt phpCAS::client() signature.
+    // A new signature has been introduced in 1.6.0 version of the official package.
+    // This new signature has been backported in the `1.3.6-1` version of the debian package,
+    // so we have to check for method argument names too.
+    $has_service_base_url_arg = version_compare(phpCAS::getVersion(), '1.6.0', '>=')
+        || ((new ReflectionMethod(phpCAS::class, 'client'))->getParameters()[4]->getName() ?? null) === 'service_base_url';
+    if (!$has_service_base_url_arg) {
+        // Prior to version 1.6.0, `$service_base_url` argument was not present, and 5th argument was `$changeSessionID`.
+        phpCAS::client(
+            constant($CFG_GLPI["cas_version"]),
+            $CFG_GLPI["cas_host"],
+            intval($CFG_GLPI["cas_port"]),
+            $CFG_GLPI["cas_uri"],
+            false
+        );
+    } else {
+        // Starting from version 1.6.0, `$service_base_url` argument was added at 5th position, and `$changeSessionID`
+        // was moved at 6th position.
+        phpCAS::client(
+            constant($CFG_GLPI["cas_version"]),
+            $CFG_GLPI["cas_host"],
+            intval($CFG_GLPI["cas_port"]),
+            $CFG_GLPI["cas_uri"],
+            $CFG_GLPI["url_base"],
+            false
+        );
+    }
     phpCAS::setServerLogoutURL(strval($CFG_GLPI["cas_logout"]));
     phpCAS::logout();
 }
@@ -87,6 +107,8 @@ if (isset($_SESSION["noAUTO"]) || isset($_GET['noAUTO'])) {
     }
     $toADD .= "noAUTO=1";
 }
+
+Session::cleanOnLogout();
 
 // Redirect to the login-page
 Html::redirect($CFG_GLPI["root_doc"] . "/index.php" . $toADD);

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,11 +33,14 @@
  * ---------------------------------------------------------------------
  */
 
+/** @var array $CFG_GLPI */
+global $CFG_GLPI;
+
 // Ensure current directory when run from crontab
 chdir(__DIR__);
 
+$SECURITY_STRATEGY = 'no_check'; // in GLPI mode, cronjob can also be triggered from public pages
 
-define('DO_NOT_CHECK_HTTP_REFERER', 1);
 include('../inc/includes.php');
 
 if (!is_writable(GLPI_LOCK_DIR)) {

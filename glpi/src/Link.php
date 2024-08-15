@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,9 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Toolbox\Sanitizer;
+use Glpi\Toolbox\URL;
+
 /** Link Class
  **/
 class Link extends CommonDBTM
@@ -43,7 +46,7 @@ class Link extends CommonDBTM
     public static $rightname = 'link';
     public static $tags      = ['[LOGIN]', '[ID]', '[NAME]', '[LOCATION]', '[LOCATIONID]', '[IP]',
         '[MAC]', '[NETWORK]', '[DOMAIN]', '[SERIAL]', '[OTHERSERIAL]',
-        '[USER]', '[GROUP]', '[REALNAME]', '[FIRSTNAME]'
+        '[USER]', '[GROUP]', '[REALNAME]', '[FIRSTNAME]', '[MODEL]'
     ];
 
 
@@ -259,16 +262,22 @@ class Link extends CommonDBTM
 
 
     /**
-     * Generate link
+     * Generate link(s).
      *
-     * @param $link    string   original string content
-     * @param $item             CommonDBTM object: item used to make replacements
+     * @param string        $link       original string content
+     * @param CommonDBTM    $item       item used to make replacements
      *
      * @return array of link contents (may have several when item have several IP / MAC cases)
-     **/
+     */
     public static function generateLinkContents($link, CommonDBTM $item)
     {
-        global $DB, $CFG_GLPI;
+        $safe_url = func_num_args() === 3 ? func_get_arg(2) : true;
+
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
        // Replace [FIELD:<field name>]
         $matches = [];
@@ -299,6 +308,16 @@ class Link extends CommonDBTM
             && $item->isField('serial')
         ) {
             $link = str_replace("[SERIAL]", $item->getField('serial'), $link);
+        }
+        if (
+            strstr($link, "[MODEL]")
+            && ($model_class = $item->getModelClass()) !== null
+        ) {
+            $link = str_replace(
+                "[MODEL]",
+                Dropdown::getDropdownName($model_class::getTable(), $item->getField($model_class::getForeignKeyField())),
+                $link
+            );
         }
         if (
             strstr($link, "[OTHERSERIAL]")
@@ -405,6 +424,9 @@ class Link extends CommonDBTM
         $replace_MAC = strstr($link, "[MAC]");
 
         if (!$replace_IP && !$replace_MAC) {
+            if ($safe_url) {
+                $link = URL::sanitizeURL($link) ?: '#';
+            }
             return [$link];
         }
        // Return several links id several IP / MAC
@@ -549,6 +571,9 @@ class Link extends CommonDBTM
                 }
 
                 if ($disp) {
+                    if ($safe_url) {
+                        $tmplink = URL::sanitizeURL($tmplink) ?: '#';
+                    }
                     $links[$key] = $tmplink;
                 }
             }
@@ -556,6 +581,9 @@ class Link extends CommonDBTM
 
         if (count($links)) {
             return $links;
+        }
+        if ($safe_url) {
+            $link = URL::sanitizeURL($link) ?: '#';
         }
         return [$link];
     }
@@ -569,6 +597,7 @@ class Link extends CommonDBTM
      **/
     public static function showForItem(CommonDBTM $item, $withtemplate = 0)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!self::canView()) {
@@ -619,6 +648,7 @@ class Link extends CommonDBTM
      **/
     public static function getAllLinksFor($item, $params = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $computedlinks = [];
@@ -639,17 +669,18 @@ class Link extends CommonDBTM
             $params['name'] = $params['link'];
         }
 
-        $names = $item->generateLinkContents($params['name'], $item);
+        $names = $item->generateLinkContents($params['name'], $item, false);
         $file  = trim($params['data']);
 
         if (empty($file)) {
-           // Generate links
-            $links = $item->generateLinkContents($params['link'], $item);
+            // Generate links
+            $link_pattern = Sanitizer::unsanitize($params['link']); // generate links from raw pattern
+            $links = $item->generateLinkContents($link_pattern, $item, true);
             $i     = 1;
             foreach ($links as $key => $val) {
+                $val     = htmlspecialchars($val); // encode special chars as value was generated from a raw pattern
                 $name    = (isset($names[$key]) ? $names[$key] : reset($names));
-                $url     = $val;
-                $newlink = "<a href='$url'";
+                $newlink = '<a href="' . $val . '"';
                 if ($params['open_window']) {
                     $newlink .= " target='_blank'";
                 }
@@ -662,8 +693,8 @@ class Link extends CommonDBTM
             }
         } else {
            // Generate files
-            $files = $item->generateLinkContents($params['link'], $item);
-            $links = $item->generateLinkContents($params['data'], $item);
+            $files = $item->generateLinkContents($params['link'], $item, false);
+            $links = $item->generateLinkContents($params['data'], $item, false);
             $i     = 1;
             foreach ($links as $key => $val) {
                 $name = (isset($names[$key]) ? $names[$key] : reset($names));
@@ -675,9 +706,9 @@ class Link extends CommonDBTM
                     $file = reset($files);
                 }
                 $url             = $CFG_GLPI["root_doc"] . "/front/link.send.php?lID=" . $params['id'] .
-                                 "&amp;itemtype=" . $item->getType() .
-                                 "&amp;id=" . $item->getID() . "&amp;rank=$key";
-                $newlink         = "<a href='$url' target='_blank'>";
+                                 "&itemtype=" . $item->getType() .
+                                 "&id=" . $item->getID() . "&rank=$key";
+                $newlink         = '<a href="' . htmlspecialchars($url) . '" target="_blank">';
                 $newlink        .= "<i class='fa-lg fa-fw fas fa-link'></i>&nbsp;";
                 $linkname        = sprintf(__('%1$s #%2$s'), $name, $i);
                 $newlink        .= sprintf(__('%1$s: %2$s'), $linkname, $val);
@@ -735,6 +766,7 @@ class Link extends CommonDBTM
 
     public static function getLinksDataForItem(CommonDBTM $item)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $restrict = self::getEntityRestrictForItem($item);

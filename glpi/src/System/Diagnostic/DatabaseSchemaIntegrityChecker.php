@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,8 +36,9 @@
 namespace Glpi\System\Diagnostic;
 
 use DBmysql;
+use Glpi\Toolbox\DatabaseSchema;
 use Glpi\Toolbox\VersionParser;
-use RuntimeException;
+use Plugin;
 use SebastianBergmann\Diff\Differ;
 use SebastianBergmann\Diff\Output\UnifiedDiffOutputBuilder;
 
@@ -128,6 +129,13 @@ class DatabaseSchemaIntegrityChecker
     private $differ;
 
     /**
+     * GLPI database version.
+     *
+     * @var string
+     */
+    private $db_version;
+
+    /**
      * @param DBmysql $db                                 DB instance.
      * @param bool $strict                                Ignore differences that has no effect on application (columns and keys order for instance).
      * @param bool $ignore_innodb_migration               Do not check tokens related to migration from "MyISAM" to "InnoDB".
@@ -180,7 +188,7 @@ class DatabaseSchemaIntegrityChecker
     /**
      * Get diff between effective table structure and proper structure contained in "CREATE TABLE" sql query.
      *
-     * @param string $table
+     * @param string $table_name
      * @param string $proper_create_table_sql
      *
      * @return string
@@ -189,14 +197,14 @@ class DatabaseSchemaIntegrityChecker
     {
         $effective_create_table_sql = $this->getEffectiveCreateTableSql($table_name);
 
-        $proper_create_table_sql    = $this->getNomalizedSql($proper_create_table_sql);
-        $effective_create_table_sql = $this->getNomalizedSql($effective_create_table_sql);
+        $proper_create_table_sql    = $this->getNormalizedSql($proper_create_table_sql);
+        $effective_create_table_sql = $this->getNormalizedSql($effective_create_table_sql);
 
         if ($proper_create_table_sql === $effective_create_table_sql) {
             return '';
         }
 
-        return $this->differ->diff(
+        return $this->diff(
             $proper_create_table_sql,
             $effective_create_table_sql
         );
@@ -210,7 +218,7 @@ class DatabaseSchemaIntegrityChecker
      * @return array    The parsed contents of the schema file.
      *                  Keys contains table names and values contains CREATE TABLE SQL queries.
      *
-     * @throws RuntimeException Thrown if the specified schema file cannot be read.
+     * @throws \RuntimeException Thrown if the specified schema file cannot be read.
      */
     public function extractSchemaFromFile(string $schema_path): array
     {
@@ -219,11 +227,11 @@ class DatabaseSchemaIntegrityChecker
             || !is_readable($schema_path)
             || ($schema_sql = file_get_contents($schema_path)) === false
         ) {
-            throw new RuntimeException(sprintf(__('Unable to read installation file "%s".'), $schema_path));
+            throw new \RuntimeException(sprintf(__('Unable to read installation file "%s".'), $schema_path));
         }
 
         $matches = [];
-        preg_match_all('/(?<sql_query>CREATE TABLE[^`]*`(?<table_name>.+)`[^;]+);/', $schema_sql, $matches);
+        preg_match_all('/(?<sql_query>CREATE TABLE[^`]*`(?<table_name>\w+)`.+?);$/ms', $schema_sql, $matches);
         $tables_names             = $matches['table_name'];
         $create_table_sql_queries = $matches['sql_query'];
 
@@ -258,21 +266,21 @@ class DatabaseSchemaIntegrityChecker
         $result = [];
 
         foreach ($schema as $table_name => $create_table_sql) {
-            $create_table_sql = $this->getNomalizedSql($create_table_sql);
+            $create_table_sql = $this->getNormalizedSql($create_table_sql);
 
             if (!$this->db->tableExists($table_name)) {
                 $result[$table_name] = [
                     'type' => self::RESULT_TYPE_MISSING_TABLE,
-                    'diff' => $this->differ->diff($create_table_sql, '')
+                    'diff' => $this->diff($create_table_sql, '')
                 ];
                 continue;
             }
 
-            $effective_create_table_sql = $this->getNomalizedSql($this->getEffectiveCreateTableSql($table_name));
+            $effective_create_table_sql = $this->getNormalizedSql($this->getEffectiveCreateTableSql($table_name));
             if ($create_table_sql !== $effective_create_table_sql) {
                 $result[$table_name] = [
                     'type' => self::RESULT_TYPE_ALTERED_TABLE,
-                    'diff' => $this->differ->diff($create_table_sql, $effective_create_table_sql)
+                    'diff' => $this->diff($create_table_sql, $effective_create_table_sql)
                 ];
             }
         }
@@ -303,15 +311,42 @@ class DatabaseSchemaIntegrityChecker
             $unknown_table_iterator = $is_context_valid ? $this->db->listTables('glpi\_%', $unknown_tables_criteria) : [];
             foreach ($unknown_table_iterator as $unknown_table_data) {
                 $table_name = $unknown_table_data['TABLE_NAME'];
-                $effective_create_table_sql = $this->getNomalizedSql($this->getEffectiveCreateTableSql($table_name));
+                $effective_create_table_sql = $this->getNormalizedSql($this->getEffectiveCreateTableSql($table_name));
                 $result[$table_name] = [
                     'type' => self::RESULT_TYPE_UNKNOWN_TABLE,
-                    'diff' => $this->differ->diff('', $effective_create_table_sql)
+                    'diff' => $this->diff('', $effective_create_table_sql)
                 ];
             }
         }
 
         return $result;
+    }
+
+    /**
+     * Check if there is differences between effective schema and expected schema for given version/context.
+     *
+     * @param string|null $schema_version   Installed schema version
+     * @param bool $include_unknown_tables  Indicates whether unknown existing tables should be include in results
+     * @param string $context               Context used for unknown tables identification (could be 'core' or 'plugin:plugin_key')
+     *
+     * @return array    List of tables that differs from the expected schema.
+     *                  Keys are table names, and each entry has following properties:
+     *                      - `type`:       difference type, see self::RESULT_TYPE_* constants;
+     *                      - `diff`:       diff string.
+     *
+     * @throws \RuntimeException Thrown if schema file is not available.
+     */
+    final public function checkCompleteSchemaForVersion(
+        ?string $schema_version = null,
+        bool $include_unknown_tables = false,
+        string $context = 'core'
+    ): array {
+        $schema_path = $this->getSchemaPath($schema_version, $context);
+        if ($schema_path === null) {
+            throw new \RuntimeException('Schema file not available.');
+        }
+
+        return $this->checkCompleteSchema($schema_path, $include_unknown_tables, $context);
     }
 
     /**
@@ -323,9 +358,9 @@ class DatabaseSchemaIntegrityChecker
      */
     protected function getEffectiveCreateTableSql(string $table_name): string
     {
-        if (($create_table_res = $this->db->query('SHOW CREATE TABLE ' . $this->db->quoteName($table_name))) === false) {
+        if (($create_table_res = $this->db->doQuery('SHOW CREATE TABLE ' . $this->db->quoteName($table_name))) === false) {
             if ($this->db->errno() == 1146) {
-                return ''; // Table does not exists, effective create table is empty (will output full proper query as diff).
+                return ''; // Table does not exist, effective create table is empty (will output full proper query as diff).
             }
             throw new \Exception(sprintf('Unable to get table "%s" structure', $table_name));
         }
@@ -340,12 +375,14 @@ class DatabaseSchemaIntegrityChecker
      *
      * @return string
      */
-    protected function getNomalizedSql(string $create_table_sql): string
+    protected function getNormalizedSql(string $create_table_sql): string
     {
         $cache_key = md5($create_table_sql);
         if (array_key_exists($cache_key, $this->normalized)) {
             return $this->normalized[$cache_key];
         }
+
+        $dbversion = $this->getDbVersion();
 
         // Clean whitespaces
         $create_table_sql = $this->normalizeWhitespaces($create_table_sql);
@@ -456,8 +493,21 @@ class DatabaseSchemaIntegrityChecker
         }
 
         if (
+            $table_name === 'glpi_notimportedemails'
+            && $dbversion !== null
+            && version_compare(VersionParser::getNormalizedVersion($dbversion), '10.0', '<')
+        ) {
+            // Before GLPI 10.0.0, COLLATE property was not explicitely defined for glpi_notimportedemails,
+            // and charset was not the same as other tables.
+            // If installed schema is < 10.0.0, we exclude CHARACTER SET and COLLATE properties from
+            // diff as we cannot easilly predict effective values (COLLATE will depend on server configuration)
+            // and, anyway, it will be fixed during GLPI 10.0.0 migration.
+            $column_replacements['/( CHARACTER SET \w+)? COLLATE \w+/i'] = '';
+        }
+        if (
             $table_name === 'glpi_impactcontexts'
-            && $this->db->tableExists('glpi_configs') && $this->db->fieldExists('glpi_configs', 'context')
+            && $dbversion !== null
+            && version_compare(VersionParser::getNormalizedVersion($dbversion), '10.0.1', '<')
         ) {
             // Remove default value on glpi_impactcontexts.positions column.
             // The default cannot be added on MySQL server, so it is impossible to fix this diff prior to migration.
@@ -466,33 +516,24 @@ class DatabaseSchemaIntegrityChecker
             // this default value on GLPI firstly installed in version <= 9.5.3.
             // see https://github.com/glpi-project/glpi/pull/8415
             // see https://github.com/glpi-project/glpi/pull/11662
-            $dbversion_res = $this->db->request(
-                [
-                    'FROM'   => 'glpi_configs',
-                    'WHERE'  => [
-                        'context' => 'core',
-                        'name'    => 'dbversion',
-                    ]
-                ]
-            )->current();
-            if (
-                $dbversion_res !== null
-                && version_compare(VersionParser::getNormalizedVersion($dbversion_res['value']), '10.0.1', '<')
-            ) {
-                $column_replacements['/(`positions`.*)\s*DEFAULT\s*\'\'\s*(.*)/'] = '$1 $2';
-            }
+            $column_replacements['/(`positions`.*)\s*DEFAULT\s*\'\'\s*(.*)/'] = '$1 $2';
         }
 
         $columns = preg_replace(array_keys($column_replacements), array_values($column_replacements), $columns);
 
         // Normalize indexes definitions
         $indexes_replacements = [
+            // Remove comments
+            '/ COMMENT \'.+\'/i' => '',
             // Always use `KEY` word
             '/INDEX\s*(`\w+`)/' => 'KEY $1',
             // Add `KEY` word when missing from UNIQUE/FULLTEXT
             '/(UNIQUE|FULLTEXT)\s*(`|\()/' => '$1 KEY $2',
             // Always have a key identifier (except on PRIMARY key)
             '/(?<!PRIMARY )KEY\s*\((`\w+`)\)/' => 'KEY $1 ($1)',
+            // Ignore length on indexes when value is `250`
+            // MariaDB in some recent version (at least 10.11.7) seems to mention it on some indexes, but we do not know why.
+            '/(`\w+`)\(250\)/' => '$1',
         ];
         $indexes = preg_replace(array_keys($indexes_replacements), array_values($indexes_replacements), $indexes);
         if (!$this->strict) {
@@ -551,6 +592,19 @@ class DatabaseSchemaIntegrityChecker
             if (in_array($properties['COLLATE'] ?? '', ['utf8_unicode_ci', 'utf8mb4_unicode_ci'])) {
                 unset($properties['COLLATE']);
             }
+        }
+        if (
+            $table_name === 'glpi_notimportedemails'
+            && $dbversion !== null
+            && version_compare(VersionParser::getNormalizedVersion($dbversion), '10.0', '<')
+        ) {
+            // Before GLPI 10.0.0, COLLATE property was not explicitely defined for glpi_notimportedemails,
+            // and charset was not the same as other tables.
+            // If installed schema is < 10.0.0, we exclude DEFAULT CHARSET and COLLATE properties from
+            // diff as we cannot easilly predict effective values (COLLATE will depend on server configuration)
+            // and, anyway, it will be fixed during GLPI 10.0.0 migration.
+            unset($properties['DEFAULT CHARSET']);
+            unset($properties['COLLATE']);
         }
         ksort($properties);
 
@@ -668,5 +722,124 @@ class DatabaseSchemaIntegrityChecker
         }
 
         return $sql;
+    }
+
+    /**
+     * Generate diff between proper and effective `CREATE TABLE` SQL string.
+     */
+    private function diff(string $proper_create_table_sql, string $effective_create_table_sql): string
+    {
+        $diff = $this->differ->diff(
+            $proper_create_table_sql,
+            $effective_create_table_sql
+        );
+
+        if (!$this->db->allow_signed_keys) {
+            // Add `unsigned` to primary/foreign keys on lines preceded by a `-` (i.e. expected but not found in DB).
+            $diff = preg_replace('/^-\s+(`id`|`.+_id(_.+)?`)\s+int(?!\s+unsigned)/im', '$0 unsigned', $diff);
+        }
+
+        return $diff;
+    }
+
+    /**
+     * Get schema file path for given version.
+     *
+     * @param string|null $schema_version   Installed schema version
+     * @param string $context               Context used for unknown tables identification (could be 'core' or 'plugin:plugin_key')
+     *
+     * @return string|null
+     */
+    private function getSchemaPath(?string $schema_version = null, string $context = 'core'): ?string
+    {
+        $schema_path = null;
+
+        if ($context === 'core') {
+            $schema_version_nohash = preg_replace('/@.+$/', '', $schema_version); // strip hash
+            $schema_path = DatabaseSchema::getEmptySchemaPath($schema_version_nohash);
+        } elseif (preg_match('/^plugin:(?<plugin_key>\w+)$/', $context) === 1) {
+            $plugin_key = str_replace('plugin:', '', $context);
+            Plugin::load($plugin_key); // Load setup file, to be able to check schema even on inactive plugins
+            $function_name = sprintf('plugin_%s_getSchemaPath', $plugin_key);
+            if (!function_exists($function_name)) {
+                return null;
+            }
+            $schema_path = $function_name($schema_version);
+        }
+
+        return !empty($schema_path) && file_exists($schema_path)
+            ? $schema_path
+            : null;
+    }
+
+    /**
+     * Check if schema integrity can be checked for given version/context.
+     *
+     * @param string|null $schema_version   Installed schema version
+     * @param string $context               Context used for unknown tables identification (could be 'core' or 'plugin:plugin_key')
+     *
+     * @return bool
+     */
+    final public function canCheckIntegrity(?string $schema_version = null, string $context = 'core'): bool
+    {
+        if ($context === 'core') {
+            $schema_version_nohash = preg_replace('/@.+$/', '', $schema_version); // strip hash
+            $is_stable_version     = VersionParser::isStableRelease($schema_version_nohash);
+            $is_latest_version     = $schema_version === GLPI_SCHEMA_VERSION;
+
+            if (!$is_stable_version && !$is_latest_version) {
+                // Cannot check integrity if version is not stable, unless installed version is latest one.
+                return false;
+            }
+        }
+        return $this->getSchemaPath($schema_version, $context) !== null;
+    }
+
+    /**
+     * Returns GLPI database version.
+     *
+     * @return string|null
+     */
+    private function getDbVersion(): ?string
+    {
+        if ($this->db_version === null) {
+            if ($this->db->tableExists('glpi_configs') && $this->db->fieldExists('glpi_configs', 'context')) {
+                $dbversion_result = $this->db->request(
+                    [
+                        'FROM'   => 'glpi_configs',
+                        'WHERE'  => [
+                            'context' => 'core',
+                            'name'    => 'dbversion',
+                        ]
+                    ]
+                );
+                if ($dbversion_result->count() > 0) {
+                    // GLPI >= 9.2
+                    $this->db_version = $dbversion_result->current()['value'];
+                } else {
+                    // GLPI >= 0.85
+                    $dbversion_result = $this->db->request(
+                        [
+                            'FROM'   => 'glpi_configs',
+                            'WHERE'  => [
+                                'context' => 'core',
+                                'name'    => 'version',
+                            ]
+                        ]
+                    );
+                    $this->db_version = $dbversion_result->current()['value'] ?? null;
+                }
+            } elseif ($this->db->tableExists('glpi_configs') && $this->db->fieldExists('glpi_configs', 'version')) {
+                // GLPI < 0.85
+                $this->db_version = $this->db->request(
+                    [
+                        'SELECT' => ['version'],
+                        'FROM'   => 'glpi_configs',
+                    ]
+                )->current()['version'] ?? null;
+            }
+        }
+
+        return $this->db_version;
     }
 }

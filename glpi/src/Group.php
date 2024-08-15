@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -38,12 +38,19 @@
  **/
 class Group extends CommonTreeDropdown
 {
+    use Glpi\Features\Clonable;
+
     public $dohistory       = true;
 
     public static $rightname       = 'group';
 
     protected $usenotepad  = true;
 
+
+    public function getCloneRelations(): array
+    {
+        return [];
+    }
 
     public static function getTypeName($nb = 0)
     {
@@ -639,6 +646,7 @@ class Group extends CommonTreeDropdown
      **/
     public function getDataItems(array $types, $field, $tree, $user, $start, array &$res)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // include item of child groups ?
@@ -740,10 +748,13 @@ class Group extends CommonTreeDropdown
                     'SELECT' => 'id',
                     'FROM'   => $item->getTable(),
                     'WHERE'  => $restrict[$itemtype],
-                    'ORDER'  => 'name',
                     'LIMIT'  => $max,
                     'START'  => $start
                 ];
+
+                if ($item->isField('name')) {
+                    $request['ORDER'] = 'name';
+                };
 
                 if ($itemtype == 'Consumable') {
                     $request['SELECT'] = 'glpi_consumableitems.id';
@@ -782,6 +793,7 @@ class Group extends CommonTreeDropdown
      **/
     public function showItems($tech)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $rand = mt_rand();
@@ -852,16 +864,20 @@ class Group extends CommonTreeDropdown
 
         if ($nb) {
             Html::printAjaxPager('', $start, $nb);
-            foreach ($datas as $data) {
-                if (!($item = getItemForItemtype($data['itemtype']))) {
-                    continue;
+            $show_massive_actions = false;
+            if (self::canUpdate()) {
+                foreach ($datas as $data) {
+                    if (!($item = getItemForItemtype($data['itemtype']))) {
+                        continue;
+                    }
+                    if ($item->canUpdate($data['items_id']) || $item->canView($data['items_id'])) {
+                        // Show massive actions if there is at least one viewable/updatable item.
+                        $show_massive_actions = true;
+                        break;
+                    }
                 }
             }
-            if (
-                $item->canUpdate($data['items_id'])
-                || ($item->canView($data['items_id'])
-                 && self::canUpdate())
-            ) {
+            if ($show_massive_actions) {
                 Html::openMassiveActionsForm('mass' . __CLASS__ . $rand);
                 echo Html::hidden('field', ['value'                 => $field,
                     'data-glpicore-ma-tags' => 'common'
@@ -883,11 +899,7 @@ class Group extends CommonTreeDropdown
             }
             echo "<table class='tab_cadre_fixehov'>";
             $header_begin  = "<tr><th width='10'>";
-            if (
-                $item->canUpdate($data['items_id'])
-                || ($item->canView($data['items_id'])
-                 && self::canUpdate())
-            ) {
+            if ($show_massive_actions) {
                 $header_top    = Html::getCheckAllAsCheckbox('mass' . __CLASS__ . $rand);
                 $header_bottom = Html::getCheckAllAsCheckbox('mass' . __CLASS__ . $rand);
             } else {
@@ -944,11 +956,7 @@ class Group extends CommonTreeDropdown
         }
 
         if ($nb) {
-            if (
-                $item->canUpdate($data['items_id'])
-                || ($item->canView($data['items_id'])
-                 && self::canUpdate())
-            ) {
+            if ($show_massive_actions) {
                 $massiveactionparams['ontop'] = false;
                 Html::showMassiveActions($massiveactionparams);
             }
@@ -966,6 +974,7 @@ class Group extends CommonTreeDropdown
     public function cleanRelationData()
     {
 
+        /** @var \DBmysql $DB */
         global $DB;
 
         parent::cleanRelationData();
@@ -1026,7 +1035,7 @@ class Group extends CommonTreeDropdown
     {
         if (
             Session::getCurrentInterface() == 'helpdesk'
-            && ($anon = self::getAnonymizedName()) !== ""
+            && ($anon = self::getAnonymizedName()) !== null
         ) {
             return $anon;
         }
@@ -1039,7 +1048,7 @@ class Group extends CommonTreeDropdown
     {
         if (
             Session::getCurrentInterface() == 'helpdesk'
-            && ($anon = $this->getAnonymizedName()) !== ""
+            && ($anon = $this->getAnonymizedName()) !== null
         ) {
             return $anon;
         }
@@ -1048,15 +1057,16 @@ class Group extends CommonTreeDropdown
     }
 
 
-    public static function getAnonymizedName(?int $entities_id = null): string
+    public static function getAnonymizedName(?int $entities_id = null): ?string
     {
         switch (Entity::getAnonymizeConfig($entities_id)) {
             default:
             case Entity::ANONYMIZE_DISABLED:
-                return "";
+                return null;
 
             case Entity::ANONYMIZE_USE_GENERIC:
             case Entity::ANONYMIZE_USE_NICKNAME:
+            case Entity::ANONYMIZE_USE_GENERIC_GROUP:
                 return __("Helpdesk group");
         }
     }

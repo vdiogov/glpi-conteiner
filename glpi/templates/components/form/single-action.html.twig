@@ -5,7 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2022 Teclib' and contributors.
+ # @copyright 2015-2024 Teclib' and contributors.
  # @copyright 2003-2014 by the INDEPNET Development Team.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
@@ -35,7 +35,7 @@
    {% set onlyicon = false %}
 {% endif %}
 
-{% if not(item.isNewItem()) %}
+{% if not(item.isNewItem()) and call(item.getType() ~ '::isMassiveActionAllowed', [item.fields['id']])%}
    {% set input = item.getMassiveActionsForItem().getInput() %}
    {% if input['actions']|length > 0 %}
    {% set ms_auto = single_actions_ms_auto ? 'ms-auto' : '' %}
@@ -50,7 +50,7 @@
       {% endif %}
    </button>
 
-   <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow mt-2" aria-labelledby="single-action">
+   <div id="single-ma-action-menu" class="dropdown-menu dropdown-menu-end dropdown-menu-arrow mt-2" aria-labelledby="single-action">
       {% for key, action in input['actions'] %}
          <a class="dropdown-item" data-action="{{ key }}" href="#">{{ action|raw }}</a>
       {% endfor %}
@@ -60,7 +60,7 @@
 $(function () {
    var ma = {{ input|json_encode|raw }};
 
-   $(document).on('click', '.moreactions', function () {
+   $(document).on('click', '#single-ma-action-menu .moreactions', function () {
       $('.moreactions + .dropdown-menu').toggle();
    });
 
@@ -74,7 +74,7 @@ $(function () {
       }
    });
 
-   $(document).on('click', '[data-action]', function () {
+   $(document).on('click', '#single-ma-action-menu [data-action]', function () {
       $('.moreactions + .dropdown-menu').hide();
 
       var current_action = $(this).data('action');

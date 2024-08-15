@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,9 @@
  * ---------------------------------------------------------------------
  */
 
+/** @var array $_UREQUEST */
+global $_UREQUEST;
+
 $AJAX_INCLUDE = 1;
 include('../inc/includes.php');
 
@@ -41,8 +44,6 @@ header("Content-Type: text/html; charset=UTF-8");
 Html::header_nocache();
 
 Session::checkLoginUser();
-
-/** @global array $_UREQUEST */
 
 $mailcollector = new MailCollector();
 

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -106,6 +106,7 @@ class NotificationTemplate extends CommonDBTM
 
     public function showForm($ID, array $options = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!Config::canUpdate()) {
@@ -237,7 +238,7 @@ class NotificationTemplate extends CommonDBTM
      * @param $event
      * @param $options      array
      *
-     * @return id of the template in templates_by_languages / false if computation failed
+     * @return false|integer id of the template in templates_by_languages / false if computation failed
      **/
     public function getTemplateByLanguage(
         NotificationTarget $target,
@@ -294,12 +295,15 @@ class NotificationTemplate extends CommonDBTM
                //If no html content, then send only in text
                 if (!empty($template_datas['content_html'])) {
                     $signature_html = RichText::getSafeHtml($this->signature);
-                    $signature_text = RichText::getTextFromHtml($this->signature, false, false);
 
                     $template_datas['content_html'] = self::process(
                         $template_datas['content_html'],
                         self::getDataForHtml($data)
                     );
+
+                    $css = !empty($this->fields['css'])
+                        ? Sanitizer::decodeHtmlSpecialChars($this->fields['css'])
+                        : '';
 
                     $lang['content_html'] =
                      "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\"
@@ -309,7 +313,7 @@ class NotificationTemplate extends CommonDBTM
                          <META http-equiv='Content-Type' content='text/html; charset=utf-8'>
                          <title>" . Html::entities_deep($lang['subject']) . "</title>
                          <style type='text/css'>
-                           " . $this->fields['css'] . "
+                           {$css}
                          </style>
                         </head>
                         <body>\n" . (!empty($add_header) ? $add_header . "\n<br><br>" : '') .
@@ -320,6 +324,7 @@ class NotificationTemplate extends CommonDBTM
                      "\n</body></html>";
                 }
 
+                $signature_text = RichText::getTextFromHtml($this->signature, false, false);
                 $lang['content_text'] = (!empty($add_header) ? $add_header . "\n\n" : '')
                 . self::process($template_datas['content_text'], self::getDataForPlainText($data))
                 . "\n\n-- \n" . $signature_text
@@ -421,6 +426,29 @@ class NotificationTemplate extends CommonDBTM
        //Now process IF statements
         $string = self::processIf($string, $cleandata);
         $string = strtr($string, $cleandata);
+
+        $string = self::convertRelativeGlpiLinksToAbsolute($string);
+
+        return $string;
+    }
+
+    /**
+     * Convert relative links to GLPI nto absolute links.
+     *
+     * @param string $string
+     * @return string
+     */
+    private static function convertRelativeGlpiLinksToAbsolute(string $string): string
+    {
+        /** @var array $CFG_GLPI */
+        global $CFG_GLPI;
+
+        // Convert domain relative links to absolute links
+        $string = preg_replace(
+            '/((?:href)=[\'"])(\/(?:[^\/][^\'"]*)?)([\'"])/',
+            '$1' . $CFG_GLPI['url_base'] . '$2$3',
+            $string
+        );
 
         return $string;
     }
@@ -556,6 +584,7 @@ class NotificationTemplate extends CommonDBTM
      **/
     public function getByLanguage($language)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -609,7 +638,7 @@ class NotificationTemplate extends CommonDBTM
         $mailing_options['items_id']     = method_exists($target->obj, "getField")
          ? $target->obj->getField('id')
          : 0;
-        if (isset($target->obj->documents)) {
+        if (property_exists($target->obj, 'documents') && isset($target->obj->documents)) {
             $mailing_options['documents'] = $target->obj->documents;
         }
 

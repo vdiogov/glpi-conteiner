@@ -3,6 +3,72 @@
 The present file will list all changes made to the project; according to the
 [Keep a Changelog](http://keepachangelog.com/) project.
 
+## [1.1.34] - 2024-02-08
+
+Fix network equipments memory conversion
+
+## [1.1.33] - 2024-02-06
+
+Handle units with memories
+
+## [1.1.32] - 2024-01-23
+
+Drive keyword for SNMP devices
+
+## [1.1.31] - 2023-09-08
+No longer required description property on slots
+Fix battery power conversion issues
+Some clarification in examples and descriptions in schema
+Add susbscriber_id property on simacrd for smartphones inventory
+Handle old ERROR node from netinventory
+
+## [1.1.30] - 2023-03-30
+Several fixes
+
+## [1.1.29] - 2023-03-29
+Update third party dependencies
+Rework hardware JSON file build
+
+## [1.1.28] - 2023-02-23
+
+Revert management IP refactoring
+Revert keep network equipments IP node out of IPS
+
+## [1.1.27] - 2023-02-02
+
+Refactor management IP
+Manage assettag
+
+## [1.1.26] - 2023-0-1-25
+
+Keep network equipments IP node out of IPS
+Fix LLDP connections ifnumber cast
+
+## [1.1.25] - 2022-11-29
+
+Fix integers conversion from XML
+
+## [1.1.24] - 2022-11-24
+
+Fix sysdescr handling
+
+## [1.1.23] - 2022-11-21
+
+Handle unmanaged assets
+
+## [1.1.22] - 2022-11-16
+
+Fix network port aggregation as string
+
+## [1.1.21] - 2022-10-21
+
+Fix last boot date format
+
+## [1.1.20] - 2022-09-23
+
+Drop storage interface pattern
+Remove unneeded files from release
+
 ## [1.1.19] - 2022-07-13
 
 Add new examples

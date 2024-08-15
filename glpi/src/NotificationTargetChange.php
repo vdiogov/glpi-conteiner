@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -72,7 +72,7 @@ class NotificationTargetChange extends NotificationTargetCommonITILObject
         $data['##change.urlvalidation##']
                      = $this->formatURL(
                          $options['additionnaloption']['usertype'],
-                         "change_" . $item->getField("id") . "_ChangeValidation$1"
+                         "change_" . $item->getField("id") . '_Change$main'
                      );
         $data['##change.globalvalidation##']
                      = ChangeValidation::getStatus($item->getField('global_validation'));

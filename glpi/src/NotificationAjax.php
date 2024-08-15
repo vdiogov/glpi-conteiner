@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -44,7 +44,7 @@ class NotificationAjax implements NotificationInterface
      * Check data
      *
      * @param mixed $value   The data to check (may differ for every notification mode)
-     * @param array $options Optionnal special options (may be needed)
+     * @param array $options Optional special options (may be needed)
      *
      * @return boolean
      **/
@@ -66,7 +66,8 @@ class NotificationAjax implements NotificationInterface
             'fromname'                    => 'TEST',
             'subject'                     => 'Test notification',
             'content_text'                => "Hello, this is a test notification.",
-            'to'                          => Session::getLoginUserID()
+            'to'                          => Session::getLoginUserID(),
+            'event'                       => 'test_notification'
         ]);
     }
 
@@ -85,6 +86,8 @@ class NotificationAjax implements NotificationInterface
         $data['name']                                 = $options['subject'];
         $data['body_text']                            = $options['content_text'];
         $data['recipient']                            = $options['to'];
+
+        $data['event'] = $options['event'] ?? null; // `event` has been added in GLPI 10.0.7
 
         $data['mode'] = Notification_NotificationTemplate::MODE_AJAX;
 
@@ -118,7 +121,11 @@ class NotificationAjax implements NotificationInterface
      */
     public static function getMyNotifications()
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $return = [];
         if ($CFG_GLPI['notifications_ajax']) {
@@ -134,12 +141,9 @@ class NotificationAjax implements NotificationInterface
             if ($iterator->numrows()) {
                 foreach ($iterator as $row) {
                     $url = null;
-                    if (
-                        $row['itemtype'] != 'NotificationAjax' &&
-                        method_exists($row['itemtype'], 'getFormURL')
-                    ) {
+                    if (is_a($row['itemtype'], CommonGLPI::class, true)) {
                         $item = new $row['itemtype']();
-                        $url = $item->getFormURL(false) . "?id={$row['items_id']}";
+                        $url = $item->getFormURLWithID($row['items_id'], true);
                     }
 
                     $return[] = [
@@ -168,6 +172,7 @@ class NotificationAjax implements NotificationInterface
      */
     public static function raisedNotification($id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $now = date('Y-m-d H:i:s');

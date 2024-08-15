@@ -5,7 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2022 Teclib' and contributors.
+ # @copyright 2015-2024 Teclib' and contributors.
  # @copyright 2003-2014 by the INDEPNET Development Team.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
@@ -86,8 +86,7 @@
                             full_width: true,
                             full_width_adapt_column: false,
                             is_horizontal: false,
-                            enable_richtext: true,
-                            enable_images: false,
+                            enable_richtext: field['enable_richtext'] is defined ? field['enable_richtext'] : true,
                         }
                     ) }}
                 {% elseif type == 'UserDropdown' %}
@@ -150,9 +149,6 @@
                     {{ fields.dropdownField(item, field['name'], item.fields[field['name']], field['label'], fields_params) }}
                 {% elseif type == 'icon' %}
                     {{ fields.dropdownIcons(field['name'], item.fields[field['name']], field['label'], fields_params) }}
-                    {% if item.fields[field['name']] is not empty %}
-                        <img class="align-middle" alt="" src="{{ config('typedoc_icon_dir') ~ '/' ~ item.fields[field['name']] }}"/>
-                    {% endif %}
                 {% elseif type == 'bool' %}
                     {{ fields.dropdownYesNo(field['name'], item.fields[field['name']], field['label'], fields_params) }}
                 {% elseif type == 'color' %}

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -150,6 +150,7 @@ final class DbUtils
         $rules = [
          //'plural'           => 'singular'
             'pdus$'              => 'pdu', // special case for acronym pdu (to avoid us rule)
+            'Metrics$'           => 'Metrics',// Special case
             'metrics$'           => 'metrics',// Special case
             'ches$'              => 'ch',
             'ch$'                => 'ch',
@@ -187,6 +188,7 @@ final class DbUtils
      */
     public function getTableForItemType($itemtype)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        // Force singular for itemtype : States case
@@ -236,6 +238,7 @@ final class DbUtils
      */
     public function getItemTypeForTable($table)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (isset($CFG_GLPI['glpiitemtypetables'][$table])) {
@@ -245,12 +248,14 @@ final class DbUtils
             $table     = str_replace("glpi_", "", $table);
             $prefix    = "";
             $pref2     = NS_GLPI;
+            $is_plugin = false;
 
             $matches = [];
             if (preg_match('/^plugin_([a-z0-9]+)_/', $table, $matches)) {
                 $table  = preg_replace('/^plugin_[a-z0-9]+_/', '', $table);
                 $prefix = "Plugin" . Toolbox::ucfirst($matches[1]);
                 $pref2  = NS_PLUG . ucfirst($matches[1]) . '\\';
+                $is_plugin = true;
             }
 
             if (strstr($table, '_')) {
@@ -278,10 +283,40 @@ final class DbUtils
                     $itemtype = $base_itemtype;
                 }
             }
+
+            // Handle namespaces
             if ($itemtype === null) {
                 $namespaced_itemtype = $this->fixItemtypeCase($pref2 . str_replace('_', '\\', $table));
+
                 if (class_exists($namespaced_itemtype)) {
                     $itemtype = $namespaced_itemtype;
+                } else {
+                    // Handle namespace + db relation
+                    // On the previous step we converted all '_' into '\'
+                    // However some '_' must be kept in case of an item relation
+                    // For example, with the `glpi_namespace1_namespace2_items_filters` table
+                    // the expected itemtype is Glpi\Namespace1\Namespace2\Item_Filter
+                    // NOT Glpi\Namespace1\Namespace2\Item\Filter
+                    // To avoid this, we can revert the last '_' and check if the itemtype exists
+                    $check_alternative = $is_plugin
+                        ? substr_count($table, '_') > 1 // for plugin classes, always keep the first+second namespace levels (GlpiPlugin\\PluginName\\)
+                        : substr_count($table, '_') > 0 // for GLPI classes, always keep the first namespace level (Glpi\\)
+                    ;
+                    if ($check_alternative) {
+                        $last_backslash_position = strrpos($namespaced_itemtype, "\\");
+                        // Replace last '\' into '_'
+                        $alternative_namespaced_itemtype = substr_replace(
+                            $namespaced_itemtype,
+                            '_',
+                            $last_backslash_position,
+                            1
+                        );
+                        $alternative_namespaced_itemtype = $this->fixItemtypeCase($alternative_namespaced_itemtype);
+
+                        if (class_exists($alternative_namespaced_itemtype)) {
+                            $itemtype = $alternative_namespaced_itemtype;
+                        }
+                    }
                 }
             }
 
@@ -307,10 +342,11 @@ final class DbUtils
      */
     public function fixItemtypeCase(string $itemtype, $root_dir = GLPI_ROOT)
     {
+        /** @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE */
         global $GLPI_CACHE;
 
         // If a class exists for this itemtype, just return the declared class name.
-        $matches = preg_grep('/^' . preg_quote($itemtype) . '$/i', get_declared_classes());
+        $matches = preg_grep('/^' . preg_quote($itemtype, '/') . '$/i', get_declared_classes());
         if (count($matches) === 1) {
             return current($matches);
         }
@@ -325,12 +361,12 @@ final class DbUtils
            // indeed, we must be able to separate plugin name (directory) from class name (file)
            // so pattern must be the one provided by getItemTypeForTable: PluginDirectorynameClassname
             $context = strtolower($plugin_matches['plugin']);
-        } else if (preg_match('/^' . preg_quote(NS_PLUG) . '(?<plugin>[a-z]+)\\\/i', $itemtype, $plugin_matches)) {
+        } else if (preg_match('/^' . preg_quote(NS_PLUG, '/') . '(?<plugin>[a-z]+)\\\/i', $itemtype, $plugin_matches)) {
             $context = strtolower($plugin_matches['plugin']);
         }
 
         $namespace      = $context === 'glpi-core' ? NS_GLPI : NS_PLUG . ucfirst($context) . '\\';
-        $uses_namespace = preg_match('/^(' . preg_quote($namespace) . ')/i', $itemtype);
+        $uses_namespace = preg_match('/^(' . preg_quote($namespace, '/') . ')/i', $itemtype);
 
         $expected_lc_path = str_ireplace(
             [$namespace, '\\'],
@@ -410,7 +446,7 @@ final class DbUtils
      *
      * @param string $itemtype itemtype
      *
-     * @return object|false itemtype instance or false if class does not exists
+     * @return CommonDBTM|false itemtype instance or false if class does not exists
      */
     public function getItemForItemtype($itemtype)
     {
@@ -457,13 +493,14 @@ final class DbUtils
     /**
      * Count the number of elements in a table.
      *
-     * @param string|array $table     table name(s)
-     * @param array        $condition array of criteria
+     * @param string|array   $table     table name(s)
+     * @param ?string|?array $condition array of criteria
      *
      * @return integer Number of elements in table
      */
     public function countElementsInTable($table, $condition = [])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!is_array($table)) {
@@ -477,6 +514,7 @@ final class DbUtils
        }*/
 
         if (!is_array($condition)) {
+            Toolbox::Deprecated('Condition must be an array!');
             if (empty($condition)) {
                 $condition = [];
             }
@@ -490,9 +528,9 @@ final class DbUtils
     /**
      * Count the number of elements in a table.
      *
-     * @param string|array $table     table name(s)
-     * @param string       $field     field name
-     * @param array        $condition array of criteria
+     * @param string|array   $table     table name(s)
+     * @param string         $field     field name
+     * @param ?string|?array $condition array of criteria
      *
      * @return int nb of elements in table
      */
@@ -500,6 +538,7 @@ final class DbUtils
     {
 
         if (!is_array($condition)) {
+            Toolbox::Deprecated('Condition must be an array!');
             if (empty($condition)) {
                 $condition = [];
             }
@@ -562,15 +601,16 @@ final class DbUtils
      * Get data from a table in an array :
      * CAUTION TO USE ONLY FOR SMALL TABLES OR USING A STRICT CONDITION
      *
-     * @param string  $table    Table name
-     * @param array   $criteria Request criteria
-     * @param boolean $usecache Use cache (false by default)
-     * @param string  $order    Result order (default '')
+     * @param string         $table    Table name
+     * @param ?string|?array $criteria Request criteria
+     * @param boolean        $usecache Use cache (false by default)
+     * @param string         $order    Result order (default '')
      *
      * @return array containing all the datas
      */
     public function getAllDataFromTable($table, $criteria = [], $usecache = false, $order = '')
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         static $cache = [];
@@ -615,6 +655,7 @@ final class DbUtils
      */
     public function isIndex($table, $field)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!$DB->tableExists($table)) {
@@ -622,7 +663,7 @@ final class DbUtils
             return false;
         }
 
-        $result = $DB->query("SHOW INDEX FROM `$table`");
+        $result = $DB->doQuery("SHOW INDEX FROM `$table`");
 
         if ($result && $DB->numrows($result)) {
             while ($data = $DB->fetchAssoc($result)) {
@@ -644,6 +685,7 @@ final class DbUtils
      */
     public function isForeignKeyContraint($table, $keyname)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $query = [
@@ -685,6 +727,7 @@ final class DbUtils
         $is_recursive = false,
         $complete_request = false
     ) {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $query = $separator . " ( ";
@@ -872,6 +915,10 @@ final class DbUtils
      */
     public function getSonsOf($table, $IDf)
     {
+        /**
+         * @var \DBmysql $DB
+         * @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE
+         */
         global $DB, $GLPI_CACHE;
 
         $ckey = 'sons_cache_' . $table . '_' . $IDf;
@@ -898,7 +945,7 @@ final class DbUtils
                 $db_sons = $iterator->current()['sons_cache'];
                 $db_sons = $db_sons !== null ? trim($db_sons) : null;
                 if (!empty($db_sons)) {
-                    $sons = $this->importArrayFromDB($db_sons, true);
+                    $sons = $this->importArrayFromDB($db_sons);
                 }
             }
         }
@@ -980,6 +1027,10 @@ final class DbUtils
      */
     public function getAncestorsOf($table, $items_id)
     {
+        /**
+         * @var \DBmysql $DB
+         * @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE
+         */
         global $DB, $GLPI_CACHE;
 
         if ($items_id === null) {
@@ -1021,7 +1072,7 @@ final class DbUtils
 
                   // Return datas from cache in DB
                     if (!empty($rancestors)) {
-                        $ancestors = array_replace($ancestors, $this->importArrayFromDB($rancestors, true));
+                        $ancestors = array_replace($ancestors, $this->importArrayFromDB($rancestors));
                     } else {
                         $loc_id_found = [];
                      // Recursive solution for table with-cache
@@ -1118,6 +1169,7 @@ final class DbUtils
      */
     public function getTreeLeafValueName($table, $ID, $withcomment = false, $translate = true)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $name    = "";
@@ -1220,6 +1272,7 @@ final class DbUtils
      */
     public function getTreeValueCompleteName($table, $ID, $withcomment = false, $translate = true, $tooltip = true, string $default = '&nbsp;')
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $name    = "";
@@ -1371,6 +1424,7 @@ final class DbUtils
      */
     public function getTreeValueName($table, $ID, $wholename = "", $level = 0)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $parentIDfield = $this->getForeignKeyFieldForTable($table);
@@ -1409,6 +1463,7 @@ final class DbUtils
      */
     public function getTreeForItem($table, $IDf)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $parentIDfield = $this->getForeignKeyFieldForTable($table);
@@ -1520,6 +1575,7 @@ final class DbUtils
      **/
     public function regenerateTreeCompleteName($table)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -1547,9 +1603,9 @@ final class DbUtils
      * Format a user name
      *
      * @param integer $ID           ID of the user.
-     * @param string  $login        login of the user
-     * @param string  $realname     realname of the user
-     * @param string  $firstname    firstname of the user
+     * @param string|null  $login        login of the user
+     * @param string|null  $realname     realname of the user
+     * @param string|null  $firstname    firstname of the user
      * @param integer $link         include link (only if $link==1) (default =0)
      * @param integer $cut          limit string length (0 = no limit) (default =0)
      * @param boolean $force_config force order and id_visible to use common config (false by default)
@@ -1558,6 +1614,7 @@ final class DbUtils
      */
     public function formatUserName($ID, $login, $realname, $firstname, $link = 1, $cut = 0, $force_config = false)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $before = "";
@@ -1573,10 +1630,10 @@ final class DbUtils
             $id_visible = $_SESSION["glpiis_ids_visible"];
         }
 
-        if ($realname !== null && strlen($realname) > 0) {
+        if (strlen($realname ?? '') > 0) {
             $formatted = $realname;
 
-            if (strlen($firstname) > 0) {
+            if (strlen($firstname ?? '') > 0) {
                 if ($order == User::FIRSTNAME_BEFORE) {
                     $formatted = $firstname . " " . $formatted;
                 } else {
@@ -1591,12 +1648,12 @@ final class DbUtils
                 $formatted = Toolbox::substr($formatted, 0, $cut) . " ...";
             }
         } else {
-            $formatted = $login;
+            $formatted = $login ?? '';
         }
 
         if (
             $ID > 0
-            && ((strlen($formatted ?? '') == 0) || $id_visible)
+            && ((strlen($formatted) == 0) || $id_visible)
         ) {
             $formatted = sprintf(__('%1$s (%2$s)'), $formatted, $ID);
         }
@@ -1605,7 +1662,7 @@ final class DbUtils
             ($link == 1)
             && ($ID > 0)
         ) {
-            $before = "<a title=\"" . Toolbox::addslashes_deep($formatted) . "\"
+            $before = "<a title=\"" . htmlspecialchars($formatted) . "\"
                        href='" . User::getFormURLWithID($ID) . "'>";
             $after  = "</a>";
         }
@@ -1623,10 +1680,11 @@ final class DbUtils
      *                      (default =0)
      * @param $disable_anon   bool  disable anonymization of username.
      *
-     * @return string username string (realname if not empty and name if realname is empty).
+     * @return string[]|string username string (realname if not empty and name if realname is empty).
      */
     public function getUserName($ID, $link = 0, $disable_anon = false)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $user = "";
@@ -1637,7 +1695,7 @@ final class DbUtils
             ];
         }
 
-        if ($ID == 'myself') {
+        if ($ID === 'myself') {
             $name = __('Myself');
             if (isset($user['name'])) {
                 $user['name'] = $name;
@@ -1728,7 +1786,11 @@ final class DbUtils
      */
     public function autoName($objectName, $field, $isTemplate, $itemtype, $entities_id = -1)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         if (!$isTemplate) {
             return $objectName;
@@ -1893,6 +1955,7 @@ final class DbUtils
      */
     public function closeDBConnections()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // Case of not init $DB object
@@ -1912,16 +1975,31 @@ final class DbUtils
      */
     public function getDateCriteria($field, $begin, $end)
     {
+        /** @var \DBmysql $DB */
+        global $DB;
+
+        $date_pattern = '/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$/'; // `YYYY-mm-dd` optionaly followed by ` HH:ii:ss`
+
         $criteria = [];
-        if (!empty($begin)) {
+        if (is_string($begin) && preg_match($date_pattern, $begin) === 1) {
             $criteria[] = [$field => ['>=', $begin]];
+        } elseif ($begin !== null && $begin !== '') {
+            trigger_error(
+                sprintf('Invalid %s date value.', json_encode($begin)),
+                E_USER_WARNING
+            );
         }
 
-        if (!empty($end)) {
+        if (is_string($end) && preg_match($date_pattern, $end) === 1) {
             $end_expr = new QueryExpression(
-                'ADDDATE(\'' . $end . '\', INTERVAL 1 DAY)'
+                'ADDDATE(' . $DB->quoteValue($end) . ', INTERVAL 1 DAY)'
             );
             $criteria[] = [$field => ['<=', $end_expr]];
+        } elseif ($end !== null && $end !== '') {
+            trigger_error(
+                sprintf('Invalid %s date value.', json_encode($end)),
+                E_USER_WARNING
+            );
         }
 
         return $criteria;
@@ -2004,7 +2082,179 @@ final class DbUtils
         if (count($plug_rel) > 0) {
             $RELATION = array_merge_recursive($RELATION, $plug_rel);
         }
-        return $RELATION;
+
+        $normalized_relations = [];
+        foreach ($RELATION as $source_table => $table_relations) {
+            $source_itemtype = getItemTypeForTable($source_table);
+            if (!is_a($source_itemtype, CommonDBTM::class, true)) {
+                trigger_error(
+                    sprintf(
+                        'Invalid relations declared for "%s" table. Table does not correspond to a known itemtype.',
+                        $source_table
+                    ),
+                    E_USER_WARNING
+                );
+                continue;
+            }
+
+            $normalized_relations[$source_table] = [];
+
+            foreach ($table_relations as $target_table_key => $target_fields) {
+                $normalized_relations[$source_table][$target_table_key] = [];
+
+                $target_table = preg_replace('/^_/', '', $target_table_key);
+
+                // Harmonize relations specs.
+                // Can be:
+                // 1 - a string representing a unique forign key relation: e.g. 'users_id'
+                // 2 - an array representing a unique polymorphic relation: e.g. ['itemtype', 'items_id']
+                // 3 - an array containing one element per relation: e.g. ['users_id', 'users_id_tech', ['itemtype', 'items_id']]
+                //
+                // Result should always be an array containing one element per relation.
+                if (
+                    !is_array($target_fields)
+                    || (
+                        // 'itemtype'/'items_id' (polymorphic relationship)
+                        count($target_fields) === 2
+                        && count(array_filter($target_fields, 'is_array')) === 0 // ensure array elements are only strings
+                        && count(preg_grep('/^itemtype/', $target_fields)) === 1
+                        && count(preg_grep('/^items_id/', $target_fields)) === 1
+                    )
+                    || (
+                        // glpi_ipaddresses relationship that does not respect naming conventions
+                        count($target_fields) === 2
+                        && count(array_filter($target_fields, 'is_array')) === 0 // ensure array elements are only strings
+                        && in_array('mainitemtype', $target_fields)
+                        && in_array('mainitems_id', $target_fields)
+                    )
+                ) {
+                    $target_fields = [$target_fields];
+                }
+
+                $target_itemtype = getItemTypeForTable($target_table);
+                if (!is_a($target_itemtype, CommonDBTM::class, true)) {
+                    trigger_error(
+                        sprintf(
+                            'Invalid relations declared for "%s" table. Target table "%s" does not correspond to a known itemtype.',
+                            $source_table,
+                            $target_table
+                        ),
+                        E_USER_WARNING
+                    );
+                    continue;
+                }
+
+                foreach ($target_fields as $target_field) {
+                    if (is_string($target_field)) {
+                        if (!str_starts_with($target_table_key, '_') && $target_itemtype::getIndexName() === $target_field) {
+                            // Relation is declared on ID field of the item.
+                            // This is an unexpected case that we cannot support.
+                            // Indeed, we would have to pass the current ID value (used to load the item before saving it)
+                            // and the new field value (used to update the value) in the same array key. This is not possible.
+                            trigger_error(
+                                sprintf(
+                                    'Relation between "%s" and "%s" table based on "%s" field cannot be handled automatically as "%s" also corresponds to index field of the target table.',
+                                    $source_table,
+                                    $target_table,
+                                    $target_field,
+                                    $target_field
+                                ),
+                                E_USER_WARNING
+                            );
+                            continue;
+                        }
+
+                        if (
+                            in_array($source_table, ['glpi_authldaps', 'glpi_authmails'])
+                            && $target_table === 'glpi_users'
+                            && $target_field === 'auths_id'
+                        ) {
+                            // Ignore this specific case.
+                            // FIXME `auths_id` should be replaced by a polymorphic `itemtype_auth`/`items_id_auth` relation.
+                            continue;
+                        }
+                        if (
+                            $source_table === 'glpi_requesttypes'
+                            && $target_table === 'glpi_users'
+                            && $target_field === 'default_requesttypes_id'
+                        ) {
+                            // Ignore this specific case.
+                            // FIXME `default_requesttypes_id` should be renamed to `requesttypes_id_default` to respect naming conventions.
+                            continue;
+                        }
+                        if (
+                            $source_table === 'glpi_knowbaseitems_comments'
+                            && $target_table === 'glpi_knowbaseitems_comments'
+                            && $target_field === 'parent_comment_id'
+                        ) {
+                            // Ignore this specific case.
+                            // FIXME `parent_comment_id` should be renamed to `knowbaseitems_comments_id_parent` to respect naming conventions.
+                            continue;
+                        }
+
+                        $target_field_itemtype = isForeignKeyField($target_field)
+                            ? getItemtypeForForeignKeyField($target_field)
+                            : null;
+                        if (!is_a($target_field_itemtype, CommonDBTM::class, true)) {
+                            // Relation is declared in a field that does not seems to be a foreign key.
+                            trigger_error(
+                                sprintf(
+                                    'Invalid relations declared between "%s" and "%s" table. Target field "%s" is not a foreign key field.',
+                                    $source_table,
+                                    $target_table,
+                                    $target_field
+                                ),
+                                E_USER_WARNING
+                            );
+                            continue;
+                        }
+
+                        if ($target_field_itemtype !== $source_itemtype) {
+                            // Relation is made on a field that is not a foreign key of the source object.
+                            trigger_error(
+                                sprintf(
+                                    'Invalid relations declared between "%s" and "%s" table. Target field "%s" is not a foreign key field of "%s".',
+                                    $source_table,
+                                    $target_table,
+                                    $target_field,
+                                    $source_itemtype
+                                ),
+                                E_USER_WARNING
+                            );
+                            continue;
+                        }
+                    } else {
+                        $is_array = is_array($target_field);
+                        $is_polymorphic_relation = $is_array
+                            && count($target_field) === 2
+                            && count(preg_grep('/^itemtype/', $target_field)) === 1
+                            && count(preg_grep('/^items_id/', $target_field)) === 1;
+                        $is_ipaddress_relation = $is_array
+                            && $target_table === 'glpi_ipaddresses'
+                            && count($target_field) === 2
+                            && in_array('mainitemtype', $target_field)
+                            && in_array('mainitems_id', $target_field);
+                        if (!$is_array && !$is_polymorphic_relation && !$is_ipaddress_relation) {
+                            trigger_error(
+                                sprintf(
+                                    'Invalid relations declared between "%s" and "%s" table. %s is not valid a valid relation.',
+                                    $source_table,
+                                    $target_table,
+                                    json_encode($target_field)
+                                ),
+                                E_USER_WARNING
+                            );
+                            continue;
+                        }
+                    }
+
+                    // If code reach this point, then no exception case was detected.
+                    // Relation si so preserved.
+                    $normalized_relations[$source_table][$target_table_key][] = $target_field;
+                }
+            }
+        }
+        return $normalized_relations;
     }
 
     /**

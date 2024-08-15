@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -83,17 +83,6 @@ class Consumable extends CommonDBChild
     }
 
 
-    public function cleanDBonPurge()
-    {
-
-        $this->deleteChildrenAndRelationsFromDb(
-            [
-                Infocom::class,
-            ]
-        );
-    }
-
-
     public function prepareInputForAdd($input)
     {
 
@@ -128,12 +117,13 @@ class Consumable extends CommonDBChild
      * send back to stock
      *
      * @param array $input Array of item fields. Only the ID field is used here.
-     * @param int $history Not used
+     * @param boolean $history Not used
      *
      * @return bool
      */
-    public function backToStock(array $input, $history = 1)
+    public function backToStock(array $input, $history = true)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $result = $DB->update(
@@ -176,6 +166,7 @@ class Consumable extends CommonDBChild
      **/
     public function out($ID, $itemtype = '', $items_id = 0)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (
@@ -203,6 +194,7 @@ class Consumable extends CommonDBChild
 
     public static function showMassiveActionsSubForm(MassiveAction $ma)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $input = $ma->getInput();
@@ -214,7 +206,7 @@ class Consumable extends CommonDBChild
                         'items_id_name'
                                                               => 'give_items_id',
                         'entity_restrict'
-                                                              => $input["entities_id"],
+                                                              => Session::getMatchingActiveEntities($input["entities_id"]),
                         'itemtypes'
                                                               => $CFG_GLPI["consumables_types"]
                     ]);
@@ -234,7 +226,7 @@ class Consumable extends CommonDBChild
         CommonDBTM $item,
         array $ids
     ) {
-
+        /** @var Consumable $item */
         switch ($ma->getAction()) {
             case 'backtostock':
                 foreach ($ids as $id) {
@@ -296,6 +288,7 @@ class Consumable extends CommonDBChild
      **/
     public static function getTotalNumber($tID)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $result = $DB->request([
@@ -316,6 +309,7 @@ class Consumable extends CommonDBChild
      **/
     public static function getOldNumber($tID)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $result = $DB->request([
@@ -339,6 +333,7 @@ class Consumable extends CommonDBChild
      **/
     public static function getUnusedNumber($tID)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $result = $DB->request([
@@ -361,6 +356,7 @@ class Consumable extends CommonDBChild
      */
     public static function getStockTarget(int $tID): int
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $it = $DB->request([
@@ -384,6 +380,7 @@ class Consumable extends CommonDBChild
      */
     public static function getAlarmThreshold(int $tID): int
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $it = $DB->request([
@@ -408,7 +405,7 @@ class Consumable extends CommonDBChild
      *
      * @return string to display
      **/
-    public static function getCount($tID, $alarm_threshold, $nohtml = 0)
+    public static function getCount($tID, $alarm_threshold, $nohtml = false)
     {
 
        // Get total
@@ -449,6 +446,7 @@ class Consumable extends CommonDBChild
      **/
     public static function isNew($cID)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $result = $DB->request([
@@ -472,6 +470,7 @@ class Consumable extends CommonDBChild
      **/
     public static function isOld($cID)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $result = $DB->request([
@@ -549,8 +548,9 @@ class Consumable extends CommonDBChild
      *
      * @return void
      **/
-    public static function showForConsumableItem(ConsumableItem $consitem, $show_old = 0)
+    public static function showForConsumableItem(ConsumableItem $consitem, $show_old = false)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $tID = $consitem->getField('id');
@@ -697,6 +697,7 @@ class Consumable extends CommonDBChild
      **/
     public static function showSummary()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!Consumable::canView()) {

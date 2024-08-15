@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,17 +33,10 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Toolbox\Sanitizer;
+
 class RuleDictionnaryOperatingSystem extends RuleDictionnaryDropdown
 {
-    /**
-     * Constructor
-     **/
-    public function __construct()
-    {
-        parent::__construct('RuleDictionnaryOperatingSystem');
-    }
-
-
     public function getCriterias()
     {
 
@@ -56,6 +49,23 @@ class RuleDictionnaryOperatingSystem extends RuleDictionnaryDropdown
         $criterias['name']['field'] = 'name';
         $criterias['name']['name']  = OperatingSystem::getTypeName(1);
         $criterias['name']['table'] = 'glpi_operatingsystems';
+
+        $criterias['os_version_name']['field'] = 'name';
+        $criterias['os_version_name']['name']  = OperatingSystemVersion::getTypeName(1);
+        $criterias['os_version_name']['table'] = 'glpi_operatingsystemversions';
+
+        $criterias['arch_name']['field'] = 'name';
+        $criterias['arch_name']['name']  = OperatingSystemArchitecture::getTypeName(1);
+        $criterias['arch_name']['table'] = 'glpi_operatingsystemarchitectures';
+
+        $criterias['servicepack_name']['field'] = 'name';
+        $criterias['servicepack_name']['name']  = OperatingSystemServicePack::getTypeName(1);
+        $criterias['servicepack_name']['table'] = 'glpi_operatingsystemservicepacks';
+
+        $criterias['os_edition']['field'] = 'name';
+        $criterias['os_edition']['name']  = OperatingSystemEdition::getTypeName(1);
+        $criterias['os_edition']['table'] = 'glpi_operatingsystemeditions';
+
         return $criterias;
     }
 

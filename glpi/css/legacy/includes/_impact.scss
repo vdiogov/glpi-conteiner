@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -372,7 +372,7 @@ i.fa-impact-manipulation {
    right           : 0;
    background-color: var(--table-head-bg);
    color: var(--table-head-color);
-   z-index         : 1050;
+   z-index         : 1000;
    border-left     : 1px solid var(--table-head-border-color);
    border-right    : 1px solid var(--table-head-border-color);
    display         : flex;

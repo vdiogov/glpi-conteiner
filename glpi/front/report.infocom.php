@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,9 +33,13 @@
  * ---------------------------------------------------------------------
  */
 
+/** @var array $CFG_GLPI */
+global $CFG_GLPI;
+
 include('../inc/includes.php');
 
-Session::checkRight("reports", READ);
+Session::checkRight(Report::$rightname, READ);
+Session::checkRight(Infocom::$rightname, READ);
 
 Html::header(Report::getTypeName(Session::getPluralNumber()), $_SERVER['PHP_SELF'], "tools", "report");
 
@@ -93,7 +97,17 @@ $valeurgraphtot      = [];
  **/
 function display_infocoms_report($itemtype, $begin, $end)
 {
-    global $DB, $valeurtot, $valeurnettetot, $valeurnettegraphtot, $valeurgraphtot, $CFG_GLPI, $stat, $chart_opts;
+    /**
+     * @var array $CFG_GLPI
+     * @var \DBmysql $DB
+     * @var int $valeurtot
+     * @var int $valeurnettetot
+     * @var array $valeurnettegraphtot
+     * @var array $valeurgraphtot
+     * @var \Stat $stat
+     * @var array $chart_opts
+     */
+    global $CFG_GLPI, $DB, $valeurtot, $valeurnettetot, $valeurnettegraphtot, $valeurgraphtot, $stat, $chart_opts;
 
     $itemtable = getTableForItemType($itemtype);
    // report need name and ticket_tco, many asset type don't have it therefore are not compatible
@@ -168,7 +182,8 @@ function display_infocoms_report($itemtype, $begin, $end)
 
         echo "<th>" . _x('price', 'Value') . "</th><th>" . __('ANV') . "</th>";
         echo "<th>" . __('TCO') . "</th><th>" . __('Date of purchase') . "</th>";
-        echo "<th>" . __('Startup date') . "</th><th>" . __('Warranty expiration date') . "</th></tr>";
+        echo "<th>" . __('Startup date') . "</th><th>" . __('Start date of warranty') . "</th>";
+        echo "<th>" . __('Warranty expiration date') . "</th></tr>";
 
         $valeursoustot      = 0;
         $valeurnettesoustot = 0;
@@ -244,7 +259,8 @@ function display_infocoms_report($itemtype, $begin, $end)
               "<td class='right'>" . Infocom::showTco($line["ticket_tco"], $line["value"]) . "</td>" .
               "<td>" . Html::convDate($line["buy_date"]) . "</td>" .
               "<td>" . Html::convDate($line["use_date"]) . "</td>" .
-              "<td>" . Infocom::getWarrantyExpir($line["buy_date"], $line["warranty_duration"]) .
+              "<td>" . Html::convDate($line["warranty_date"]) . "</td>" .
+              "<td>" . Infocom::getWarrantyExpir($line["warranty_date"], $line["warranty_duration"]) .
               "</td></tr>";
         }
 
@@ -327,6 +343,10 @@ echo "<table><tr><td class='top'>";
 
 while (count($types) > 0) {
     $type = array_shift($types);
+
+    if (!is_a($type, CommonDBTM::class, true) || !$type::canView()) {
+        continue;
+    }
 
     if (display_infocoms_report($type, $_POST["date1"], $_POST["date2"])) {
         echo "</td>";

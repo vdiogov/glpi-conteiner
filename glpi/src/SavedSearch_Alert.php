@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -65,7 +65,7 @@ class SavedSearch_Alert extends CommonDBChild
 
        // can exists for template
         if (
-            ($item->getType() == 'SavedSearch')
+            ($item instanceof SavedSearch)
             && SavedSearch::canView()
         ) {
             $nb = 0;
@@ -107,7 +107,7 @@ class SavedSearch_Alert extends CommonDBChild
      *     - target for the Form
      *     - computers_id ID of the computer for add process
      *
-     * @return true if displayed  false if item not found or not right to display
+     * @return boolean true if displayed  false if item not found or not right to display
      **/
     public function showForm($ID, array $options = [])
     {
@@ -192,12 +192,13 @@ class SavedSearch_Alert extends CommonDBChild
      * Print the searches alerts
      *
      * @param SavedSearch $search       Object instance
-     * @param boolean     $withtemplate Template or basic item (default '')
+     * @param integer     $withtemplate Template or basic item (default '')
      *
      * @return void
      **/
     public static function showForSavedSearch(SavedSearch $search, $withtemplate = 0)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $ID = $search->getID();
@@ -335,6 +336,7 @@ class SavedSearch_Alert extends CommonDBChild
      */
     private static function saveContext()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
         $context = [];
         $context['$_SESSION'] = $_SESSION;
@@ -353,6 +355,7 @@ class SavedSearch_Alert extends CommonDBChild
      */
     private static function restoreContext($context)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
         $_SESSION = $context['$_SESSION'];
         $CFG_GLPI = $context['$CFG_GLPI'];
@@ -369,6 +372,7 @@ class SavedSearch_Alert extends CommonDBChild
      */
     public static function cronSavedSearchesAlerts($task)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -504,7 +508,7 @@ class SavedSearch_Alert extends CommonDBChild
                               'items_id' => $row['id'],
                           ]);
                     }
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     self::restoreContext($context);
                     ErrorHandler::getInstance()->handleException($e);
                 }

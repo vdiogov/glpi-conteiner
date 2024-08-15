@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -155,9 +155,9 @@ function displayOtherSelectOptions(select_object, other_option_name) {
  * @param {HTMLElement} reference
  * @param {string} container_id
 **/
-function checkAsCheckboxes(reference, container_id) {
+function checkAsCheckboxes(reference, container_id, checkboxes_selector = 'input[type="checkbox"]') {
     reference = typeof(reference) === 'string' ? document.getElementById(reference) : reference;
-    $('#' + container_id + ' input[type="checkbox"]:enabled')
+    $('#' + container_id + ' ' + checkboxes_selector + ':enabled')
         .prop('checked', $(reference).is(':checked'));
 
     return true;
@@ -191,10 +191,9 @@ $.fn.shiftSelectable = function() {
         }
 
         if (evt.shiftKey) {
-            evt.preventDefault();
             var start = $boxes.index(selected_checkbox);
             var end = $boxes.index(lastChecked);
-            $boxes.slice(Math.min(start, end), Math.max(start, end) + 1)
+            $boxes.slice(Math.min(start, end), Math.max(start, end))
                 .prop('checked', $(lastChecked).is(':checked'))
                 .trigger('change');
         }
@@ -707,7 +706,7 @@ function _eltRealSize(_elt) {
     return _s;
 }
 
-var initMap = function(parent_elt, map_id, height, initial_view = {position: [43.6112422, 3.8767337], zoom: 6}) {
+var initMap = function(parent_elt, map_id, height, initial_view = {position: [0, 0], zoom: 1}) {
     // default parameters
     map_id = (typeof map_id !== 'undefined') ? map_id : 'map';
     height = (typeof height !== 'undefined') ? height : '200px';
@@ -1011,6 +1010,9 @@ var getTextWithoutDiacriticalMarks = function (text) {
  * @return {string}
  */
 var escapeMarkupText = function (text) {
+    if (typeof(text) !== 'string') {
+        return text;
+    }
     if (text.indexOf('>') !== -1 || text.indexOf('<') !== -1) {
         // escape text, if it contains chevrons (can already be escaped prior to this point :/)
         text = jQuery.fn.select2.defaults.defaults.escapeMarkup(text);
@@ -1150,23 +1152,34 @@ function onTinyMCEChange(e) {
 }
 
 function relativeDate(str) {
+    var today = new Date(),
+        strdate = new Date(str);
+    today.setHours(0, 0, 0, 0);
+    strdate.setHours(0, 0, 0, 0);
+
     var s = ( +new Date() - Date.parse(str) ) / 1e3,
         m = s / 60,
         h = m / 60,
-        d = h / 24,
-        y = d / 365.242199,
+        d = ( today - strdate ) / 864e5,
+        w = d / 7,
+        mo = d / 30.44,
+        y = d / 365.24,
         tmp;
 
     return (tmp = Math.round(s)) === 1 ? __('just now')
-        : m < 1.01 ? '%s seconds ago'.replace('%s', tmp)
+        : m < 1.01 ? __('%s seconds ago').replace('%s', tmp)
             : (tmp = Math.round(m)) === 1 ? __('a minute ago')
-                : h < 1.01 ? '%s minutes ago'.replace('%s', tmp)
+                : h < 1.01 ? __('%s minutes ago').replace('%s', tmp)
                     : (tmp = Math.round(h)) === 1 ? __('an hour ago')
-                        : d < 1.01 ? '%s hours ago'.replace('%s', tmp)
+                        : d < 1.01 ? __('%s hours ago').replace('%s', tmp)
                             : (tmp = Math.round(d)) === 1 ? __('yesterday')
-                                : y < 1.01 ? '%s days ago'.replace('%s', tmp)
-                                    : (tmp = Math.round(y)) === 1 ? __('a year ago')
-                                        : '%s years ago'.replace('%s', tmp);
+                                : w < 1.01 ? __('%s days ago').replace('%s', tmp)
+                                    : (tmp = Math.floor(w)) === 1 ? __('a week ago')
+                                        : mo < 1.01 ? __('%s weeks ago').replace('%s', tmp)
+                                            : (tmp = Math.floor(mo)) === 1 ? __('a month ago')
+                                                : y < 1 ? __('%s months ago').replace('%s', tmp)
+                                                    : (tmp = Math.floor(y)) === 1 ? __('a year ago')
+                                                        : __('%s years ago').replace('%s', tmp);
 }
 
 /**
@@ -1344,7 +1357,7 @@ function tableToDetails(table) {
     section_els.each((i, e) => {
         if (e.classList.contains('section-header')) {
             if (in_details) {
-                details += '</details>';
+                details += '</pre></details>';
             }
             details += `<details><summary>${e.innerText}</summary><pre>`;
             in_details = true;
@@ -1390,7 +1403,10 @@ function flashIconButton(button, button_classes, icon_classes, duration) {
 function uniqid(prefix = "", more_entropy = false) {
     const sec = Date.now() * 1000 + Math.random() * 1000;
     const id = sec.toString(16).replace(/\./g, "").padEnd(14, "0");
-    return `${prefix}${id}${more_entropy ? `.${Math.trunc(Math.random() * 100000000)}`:""}`;
+    const suffix = more_entropy
+        ? '.' + Math.floor(Math.random() * 100000000).toString().padStart(8, '0')
+        : '';
+    return `${prefix}${id}${suffix}`;
 }
 
 /**
@@ -1409,7 +1425,7 @@ function blockFormSubmit(form, e) {
 
     // if submitter is not a button, find the first submit button with add or update as the name
     if (submitter === null || !submitter.is('button')) {
-        submitter = submitter.find('button[name="add"]:first, button[name="update"]:first');
+        submitter = form.find('button[name="add"]:first, button[name="update"]:first');
         // If no submit button was found, use the first submit button
         if (submitter.length === 0) {
             submitter = form.find('button[type="submit"]:first');
@@ -1426,14 +1442,16 @@ function blockFormSubmit(form, e) {
     form.attr('data-submitted', 'true');
 }
 
-$(document.body).on('submit', 'form[data-submit-once]', (e) => {
-    const form = $(e.target).closest('form');
-    if (form.attr('data-submitted') === 'true') {
-        e.preventDefault();
-        return false;
-    } else {
-        blockFormSubmit(form, e);
-    }
+$(() => {
+    $(document.body).on('submit', 'form[data-submit-once]', (e) => {
+        const form = $(e.target).closest('form');
+        if (form.attr('data-submitted') === 'true') {
+            e.preventDefault();
+            return false;
+        } else {
+            blockFormSubmit(form, e);
+        }
+    });
 });
 
 /**
@@ -1445,4 +1463,122 @@ $(document.body).on('submit', 'form[data-submit-once]', (e) => {
 function strip_tags(html_string) {
     var dom = new DOMParser().parseFromString(html_string, 'text/html');
     return dom.body.textContent;
+}
+
+$(document.body).on('shown.bs.tab', 'a[data-bs-toggle="tab"]', (e) => {
+    const new_tab = $(e.target);
+    // Main tab is the first in the list (check parent li)
+    const is_main_tab = new_tab.parent().index() === 0;
+    const nav_header = new_tab.closest('.card-tabs').parent().find('.navigationheader');
+    if (nav_header.length > 0) {
+        const is_recursive_toggle = nav_header.find('span.is_recursive-toggle');
+        if (is_recursive_toggle.length > 0) {
+            const checkbox = is_recursive_toggle.find('input');
+            const disabled_state = checkbox.prop('disabled');
+            // if data-disabled-initial is not set, set it to the current disabled state
+            if (checkbox.attr('data-disabled-initial') === undefined) {
+                checkbox.attr('data-disabled-initial', disabled_state || false);
+            }
+            const original_disabled_state = checkbox.attr('data-disabled-initial') === 'true';
+            // disable input element inside the toggle
+            checkbox.prop('disabled', is_main_tab ? original_disabled_state : true);
+        }
+    }
+});
+
+/**
+ * Converts a disclosable password field to a normal text field
+ * @param {string} item The ID of the field to be shown
+ */
+function showDisclosablePasswordField(item) {
+    $("#" + item).prop("type", "text");
+}
+
+/**
+ * Converts a normal text field to a password field
+ * @param {string} item The ID of the field to be hidden
+ */
+function hideDisclosablePasswordField(item) {
+    $("#" + item).prop("type", "password");
+}
+
+/**
+ * Copies the password from a disclosable password field to the clipboard
+ * @param {string} item The ID of the field to be copied
+ */
+function copyDisclosablePasswordFieldToClipboard(item) {
+    showDisclosablePasswordField(item);
+    $("#" + item).select();
+    try {
+        document.execCommand("copy");
+    } catch (e) {
+        alert("Copy to clipboard failed'");
+    }
+    hideDisclosablePasswordField(item);
+}
+
+/**
+ * Convert an HTML table with static content to a basic sortable table
+ * @param element_id The ID of the table to be converted
+ */
+function initSortableTable(element_id) {
+    const element = $(`#${element_id}`);
+    const sort_table = (column_index) => {
+        const current_sort = element.data('sort');
+        element.data('sort', column_index);
+        const current_order = element.data('order');
+        const new_order = current_sort === column_index && current_order === 'asc' ? 'desc' : 'asc';
+        element.data('order', new_order);
+        const sortable_header = element.find('thead').first();
+        const col = sortable_header.find('th').eq(column_index);
+        // Remove all sort icon classes
+        sortable_header.find('th i[class*="fa-sort"]').removeClass('fa-sort fa-sort-asc fa-sort-desc');
+
+        const sort_icon = col.find('i');
+        if (sort_icon.length === 0) {
+            // Add sort icon
+            col.eq(0).append(`<i class="fas fa-sort-${new_order}"></i>`);
+        } else {
+            sort_icon.addClass(new_order === 'asc' ? 'fa-sort-asc' : 'fa-sort-desc');
+        }
+
+        const rows = element.find('tbody tr');
+        const sorted_rows = rows.sort((a, b) => {
+            const a_cell = $(a).find('td').eq(column_index);
+            const b_cell = $(b).find('td').eq(column_index);
+            let a_value = a_cell.text();
+            let b_value = b_cell.text();
+
+            if (a_cell.attr('data-value-unit') !== undefined) {
+                a_value = a_value.replace(a_cell.attr('data-value-unit'), '').trim();
+            }
+            if (b_cell.attr('data-value-unit') !== undefined) {
+                b_value = b_value.replace(b_cell.attr('data-value-unit'), '').trim();
+            }
+            // if the values are numberic, cast them to numbers to sort them correctly
+            if (!isNaN(a_value) && !isNaN(b_value)) {
+                a_value = Number(a_value);
+                b_value = Number(b_value);
+            }
+
+            if (a_value === b_value) {
+                return 0;
+            }
+            if (new_order === 'asc') {
+                return a_value < b_value ? -1 : 1;
+            }
+            return a_value > b_value ? -1 : 1;
+        });
+        element.find('tbody').html(sorted_rows);
+    };
+
+    // Make all th in thead appear clickable and bold
+    element.find('thead th').attr('role', 'button');
+    element.find('thead th').addClass('fw-bold');
+
+    element.find('thead th').each((index, header) => {
+        $(header).on('click', () => {
+            sort_table(index);
+        });
+    });
 }

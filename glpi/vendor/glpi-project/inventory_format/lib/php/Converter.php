@@ -41,8 +41,12 @@
 
 namespace Glpi\Inventory;
 
+use DateTime;
+use Exception;
+use RuntimeException;
 use Swaggest\JsonSchema\Context;
 use Swaggest\JsonSchema\Schema;
+use UnexpectedValueException;
 
 /**
  * Converts old FusionInventory XML format to new JSON schema
@@ -59,31 +63,31 @@ class Converter
 {
     public const LAST_VERSION = 0.1;
 
-    /** @var ?double */
-    private $target_version;
+    /** @var ?float */
+    private ?float $target_version;
 
     /** @var bool */
-    private $debug = false;
+    private bool $debug = false;
     /**
      * XML a different steps. Used for debug only
-     * @var array
+     * @var array<int, mixed>
      */
-    private $steps;
+    private array $steps;
 
-    /** @var array */
-    private $mapping = [
+    /** @var array<string, float> */
+    private array $mapping = [
         '01'   => 0.1
     ];
 
-    /** @var array */
-    private $schema_patterns;
-    /** @var array */
-    private $extra_properties;
-    /** @var array */
-    private $extra_sub_properties;
+    /** @var array<string, array<int, string>> */
+    private array $schema_patterns;
+    /** @var array<string, array<string, string>> */
+    private array $extra_properties = [];
+    /** @var array<string, array<string, array<string, string>>> */
+    private array $extra_sub_properties = [];
 
     /**
-     * @var array
+     * @var array<string, array<int, string>>
      *
      * A two dimensions array with types as key,
      * and nodes names as values.
@@ -103,12 +107,12 @@ class Converter
      * @see Converter::getCastedValue() for supported types
      * @see Converter::convertTypes() for usage
      */
-    private $convert_types;
+    private array $convert_types;
 
     /**
      * Instantiate converter
      *
-     * @param double|null $target_version JSON schema based version to target. Use last version if null.
+     * @param ?float $target_version JSON schema based version to target. Use last version if null.
      */
     public function __construct($target_version = null)
     {
@@ -117,7 +121,7 @@ class Converter
         }
 
         if (!is_double($target_version)) {
-            throw new \UnexpectedValueException('Version must be a double!');
+            throw new UnexpectedValueException('Version must be a double!');
         }
 
         $this->target_version = $target_version;
@@ -126,11 +130,11 @@ class Converter
     /**
      * Get target version
      *
-     * @return double
+     * @return float
      */
-    public function getTargetVersion()
+    public function getTargetVersion(): float
     {
-        return $this->target_version;
+        return $this->target_version ?? self::LAST_VERSION;
     }
 
     /**
@@ -140,9 +144,9 @@ class Converter
      *
      * @return Converter
      */
-    public function setDebug($debug)
+    public function setDebug(bool $debug): self
     {
-        $this->debug = (bool)$debug;
+        $this->debug = $debug;
         return $this;
     }
 
@@ -151,7 +155,7 @@ class Converter
      *
      * @return boolean
      */
-    public function isDebug()
+    public function isDebug(): bool
     {
         return $this->debug;
     }
@@ -161,26 +165,30 @@ class Converter
      *
      * @return string
      */
-    public function getSchemaPath()
+    public function getSchemaPath(): string
     {
-        return realpath(__DIR__ . '/../../inventory.schema.json');
+        $schema_path = realpath(__DIR__ . '/../../inventory.schema.json');
+        if ($schema_path === false) {
+            throw new RuntimeException('Schema file not found!');
+        }
+        return $schema_path;
     }
 
     /**
-     * @param array $properties
+     * @param array<string, array<string, string>> $properties
      * @return $this
      */
-    public function setExtraProperties(array $properties)
+    public function setExtraProperties(array $properties): self
     {
         $this->extra_properties = $properties;
         return $this;
     }
 
     /**
-     * @param array $properties
+     * @param array<string, array<string, array<string, string>>> $properties
      * @return $this
      */
-    public function setExtraSubProperties(array $properties)
+    public function setExtraSubProperties(array $properties): self
     {
         $this->extra_sub_properties = $properties;
         return $this;
@@ -192,14 +200,18 @@ class Converter
      */
     public function buildSchema()
     {
-        $schema = json_decode(file_get_contents($this->getSchemaPath()));
+        $string = file_get_contents($this->getSchemaPath());
+        if ($string === false) {
+            throw new RuntimeException('Unable to read schema file');
+        }
+        $schema = json_decode($string);
 
         $properties = $schema->properties->content->properties;
 
         if ($this->extra_properties != null) {
             foreach ($this->extra_properties as $extra_property => $extra_config) {
                 if (!property_exists($properties, $extra_property)) {
-                    $properties->$extra_property = json_decode(json_encode($extra_config));
+                    $properties->$extra_property = json_decode((string)json_encode($extra_config));
                 } else {
                     trigger_error(
                         sprintf('Property %1$s already exists in schema.', $extra_property),
@@ -218,7 +230,7 @@ class Converter
                             case 'array':
                                 if (!property_exists($properties->$extra_sub_property->items->properties, $subprop)) {
                                     $properties->$extra_sub_property->items->properties->$subprop =
-                                        json_decode(json_encode($subconfig));
+                                        json_decode((string)json_encode($subconfig));
                                 } else {
                                     trigger_error(
                                         sprintf('Property %1$s already exists in schema.', $subprop),
@@ -229,7 +241,7 @@ class Converter
                             case 'object':
                                 if (!property_exists($properties->$extra_sub_property->properties, $subprop)) {
                                     $properties->$extra_sub_property->properties->$subprop =
-                                        json_decode(json_encode($subconfig));
+                                        json_decode((string)json_encode($subconfig));
                                 } else {
                                     trigger_error(
                                         sprintf(
@@ -260,11 +272,11 @@ class Converter
     /**
      * Do validation (against last schema only!)
      *
-     * @param array $json Converted data to validate
+     * @param mixed $json Converted data to validate
      *
      * @return boolean
      */
-    public function validate($json)
+    public function validate($json): bool
     {
         try {
             $schema = Schema::import($this->buildSchema());
@@ -273,11 +285,11 @@ class Converter
             $context->tolerateStrings = (!defined('TU_USER'));
             $schema->in($json, $context);
             return true;
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             $errmsg = "JSON does not validate. Violations:\n";
             $errmsg .= $e->getMessage();
             $errmsg .= "\n";
-            throw new \RuntimeException($errmsg);
+            throw new RuntimeException($errmsg);
         }
     }
 
@@ -288,7 +300,7 @@ class Converter
      *
      * @return string|false
      */
-    public function convert($xml)
+    public function convert(string $xml)
     {
         libxml_use_internal_errors(true);
         $sxml = simplexml_load_string($xml);
@@ -297,7 +309,7 @@ class Converter
             foreach (libxml_get_errors() as $error) {
                 $errmsg .= "\n" . $error->message;
             }
-            throw new \RuntimeException($errmsg);
+            throw new RuntimeException($errmsg);
         }
 
         //remove empty nodes
@@ -308,7 +320,7 @@ class Converter
         }
         //convert SimpleXML object to array, recursively.
         $data = json_decode(
-            json_encode((array)$sxml),
+            (string)json_encode((array)$sxml),
             true
         );
         $this->loadSchemaPatterns();
@@ -321,7 +333,7 @@ class Converter
             }
 
             if (!$data = $this->$method($data)) {
-                throw new \RuntimeException('Conversion has failed at ' . $method);
+                throw new RuntimeException('Conversion has failed at ' . $method);
             }
         }
 
@@ -331,9 +343,9 @@ class Converter
     /**
      * Get methods names we'll have to call in order to convert
      *
-     * @return string[]
+     * @return array<int, string>
      */
-    public function getMethods()
+    public function getMethods(): array
     {
         $methods = [];
 
@@ -349,11 +361,11 @@ class Converter
     /**
      * Converts to inventory format 0.1
      *
-     * @param array $data Contents
+     * @param array<string, mixed> $data Contents
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    private function convertTo01(array $data)
+    private function convertTo01(array $data): array
     {
         //all keys are now lowercase
         $data = $this->arrayChangeKeyCaseRecursive($data);
@@ -408,8 +420,6 @@ class Converter
                 'drives/free',
                 'drives/total',
                 'hardware/etime',
-                'hardware/memory',
-                'hardware/swap',
                 'storages/disksize',
                 'physical_volumes/free',
                 'physical_volumes/pe_size',
@@ -421,16 +431,12 @@ class Converter
                 'volume_groups/size',
                 'logical_volumes/seg_count',
                 'logical_volumes/size',
-                'memories/capacity',
                 'memories/numslots',
                 'processes/pid',
                 'processes/virtualmemory',
                 'networks/mtu',
                 'softwares/filesize',
-                'virtualmachines/memory',
                 'virtualmachines/vcpu',
-                'videos/memory',
-                'batteries/real_capacity',
                 'network_ports/ifinerrors',
                 'network_ports/ifinoctets',
                 'network_ports/ifinbytes',
@@ -446,8 +452,6 @@ class Converter
                 'network_ports/iftype',
                 'network_components/fru',
                 'network_components/index',
-                'network_device/ram',
-                'network_device/memory',
                 'network_device/credentials',
                 'pagecounters/total',
                 'pagecounters/black',
@@ -580,9 +584,9 @@ class Converter
                 if (isset($process['started'])) {
                     if (preg_match($ns_pattern, $process['started'])) {
                         try {
-                            $started = new \DateTime($process['started']);
+                            $started = new DateTime($process['started']);
                             $process['started'] = $started->format('Y-m-d H:i:s');
-                        } catch (\Exception $e) {
+                        } catch (Exception $e) {
                             //not valid, drop.
                             unset($process['started']);
                         }
@@ -629,6 +633,28 @@ class Converter
                 $data['content']['bios']['bdate'] = $convertedDate;
             } else {
                 unset($data['content']['bios']['bdate']);
+            }
+        }
+
+        if (isset($data['content']['operatingsystem']['boot_time'])) {
+            //convert to 'Y-m-d H:i:s' if format = 'Y-d-m H:i:s'
+            $boot_time  = $data['content']['operatingsystem']['boot_time'];
+            $boot_datetime =  DateTime::createFromFormat('Y-d-m H:i:s', $boot_time);
+            //check if create from 'Y-d-m H:i:s' format is OK (ie: 2022-21-09 05:21:23)
+            //but he can return a new DateTime instead of false for '2022-10-04 05:21:23'
+            //so check return value from strtotime because he only knows / handle 'English textual datetime'
+            //https://www.php.net/manual/en/function.strtotime.php
+            //if strtotime return false it's already Y-m-d H:i:s format
+            if ($boot_datetime !== false && strtotime($boot_time) === false) {
+                $boot_time = $boot_datetime->format('Y-m-d H:i:s');
+                $data['content']['operatingsystem']['boot_time'] = $boot_time;
+            }
+
+            $convertedDate = $this->convertDate($data['content']['operatingsystem']['boot_time'], 'Y-m-d H:i:s');
+            if ($convertedDate !== null) {
+                $data['content']['operatingsystem']['boot_time'] = $convertedDate;
+            } else {
+                unset($data['content']['operatingsystem']['boot_time']);
             }
         }
 
@@ -782,7 +808,7 @@ class Converter
         }
 
         //missing hour in timezone offset
-        if (isset($data['content']['operatingsystem']) && isset($data['content']['operatingsystem']['timezone'])) {
+        if (isset($data['content']['operatingsystem']['timezone'])) {
             $timezone = &$data['content']['operatingsystem']['timezone'];
 
             if (preg_match('/^[+-][0-9]{2}$/', $timezone['offset'])) {
@@ -811,7 +837,6 @@ class Converter
             }
         }
 
-
         //Fix batteries capacities & voltages
         if (isset($data['content']['batteries'])) {
             foreach ($data['content']['batteries'] as &$battery) {
@@ -823,7 +848,7 @@ class Converter
                 foreach ($powers as $power) {
                     if (isset($battery[$power])) {
                         $value = $this->convertBatteryPower($battery[$power]);
-                        if ($value == false) {
+                        if (!$value) {
                             unset($battery[$power]);
                         } else {
                             $battery[$power] = $value;
@@ -833,7 +858,7 @@ class Converter
 
                 if (isset($battery['voltage'])) {
                     $voltage = $this->convertBatteryVoltage($battery['voltage']);
-                    if ($voltage == false) {
+                    if (!$voltage) {
                         unset($battery['voltage']);
                     } else {
                         $battery['voltage'] = $voltage;
@@ -847,7 +872,7 @@ class Converter
             foreach ($data['content']['powersupplies'] as &$psupply) {
                 if (isset($psupply['power_max'])) {
                     $value = $this->convertBatteryPower($psupply['power_max']);
-                    if ($value == false) {
+                    if (!$value) {
                         unset($psupply['power_max']);
                     } else {
                         $psupply['power_max'] = $value;
@@ -855,7 +880,6 @@ class Converter
                 }
             }
         }
-
 
         //type on ports is required
         if (isset($data['content']['ports'])) {
@@ -880,6 +904,44 @@ class Converter
                     }
                     unset($network['macaddr']);
                 }
+            }
+        }
+
+        //fix memories that can have a unit
+        if (isset($data['content']['hardware']['memory'])) {
+            $data['content']['hardware']['memory'] = $this->convertMemory($data['content']['hardware']['memory']);
+        }
+        if (isset($data['content']['hardware']['swap'])) {
+            $data['content']['hardware']['swap'] = $this->convertMemory($data['content']['hardware']['swap']);
+        }
+        if (isset($data['content']['memories'])) {
+            foreach ($data['content']['memories'] as &$memory) {
+                if (isset($memory['capacity'])) {
+                    $memory['capacity'] = $this->convertMemory($memory['capacity']);
+                }
+            }
+        }
+        if (isset($data['content']['videos'])) {
+            foreach ($data['content']['videos'] as &$video) {
+                if (isset($video['memory'])) {
+                    $video['memory'] = $this->convertMemory($video['memory']);
+                }
+            }
+        }
+        if (isset($data['content']['virtualmachines'])) {
+            foreach ($data['content']['virtualmachines'] as &$vm) {
+                if (isset($vm['memory'])) {
+                    $vm['memory'] = $this->convertMemory($vm['memory']);
+                }
+            }
+        }
+        if (isset($data['content']['network_device'])) {
+            $netdev = &$data['content']['network_device'];
+            if (isset($netdev['memory'])) {
+                $netdev['memory'] = $this->convertMemory($netdev['memory']);
+            }
+            if (isset($netdev['ram'])) {
+                $netdev['ram'] = $this->convertMemory($netdev['ram']);
             }
         }
 
@@ -965,10 +1027,6 @@ class Converter
                 'health',
                 'status'
             ],
-            'simcards' => [
-                'serial',
-                'subscriber_id'
-            ],
             'network_components' => [
                 'ip',
                 'mac'
@@ -1050,11 +1108,11 @@ class Converter
     /**
      * Set convert types
      *
-     * @param array $convert_types COnvert types cnfiguration
+     * @param array<string, array<int, string>> $convert_types Convert types configuration
      *
      * @return Converter
      */
-    public function setConvertTypes(array $convert_types)
+    public function setConvertTypes(array $convert_types): self
     {
         $this->convert_types = $convert_types;
         return $this;
@@ -1066,18 +1124,18 @@ class Converter
      * Method must populate $convert_types array.
      * @see Converter::convert_types parameter
      *
-     * @param array $data Input data, will be modified
+     * @param array<string, mixed> $data Input data, will be modified
      *
      * @return void
      */
-    public function convertTypes(&$data)
+    public function convertTypes(array &$data): void
     {
         $types = $this->convert_types;
         foreach ($types as $type => $names) {
             foreach ($names as $name) {
                 $keys = explode('/', $name);
                 if (count($keys) != 2) {
-                    throw new \RuntimeException($name . ' not supported!');
+                    throw new RuntimeException($name . ' not supported!');
                 }
                 if (isset($data['content'][$keys[0]])) {
                     if (is_array($data['content'][$keys[0]])) {
@@ -1100,7 +1158,7 @@ class Converter
                         }
                     }
                 }
-                if (isset($data['content'][$keys[0]]) && isset($data['content'][$keys[0]][$keys[1]])) {
+                if (isset($data['content'][$keys[0]][$keys[1]])) {
                     $data['content'][$keys[0]][$keys[1]] = $this->getCastedValue(
                         $data['content'][$keys[0]][$keys[1]],
                         $type
@@ -1119,26 +1177,31 @@ class Converter
      *
      * @return mixed
      */
-    public function getCastedValue($value, $type)
+    public function getCastedValue(string $value, string $type)
     {
         switch ($type) {
             case 'boolean':
                 return (bool)$value;
             case 'integer':
-                return (int)$value;
+                $casted = (int)$value;
+                if (is_numeric($value) && $value == $casted) {
+                    return $casted;
+                } else {
+                    return null;
+                }
             default:
-                throw new \UnexpectedValueException('Type ' . $type . ' not known.');
+                throw new UnexpectedValueException('Type ' . $type . ' not known.');
         }
     }
 
     /**
      * Change array keys case recursively
      *
-     * @param array $array Input array
+     * @param array<string, mixed> $array Input array
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function arrayChangeKeyCaseRecursive(array $array)
+    public function arrayChangeKeyCaseRecursive(array $array): array
     {
         return array_map(
             function ($item) {
@@ -1159,7 +1222,7 @@ class Converter
      *
      * @return string|null
      */
-    public function convertDate($value, $format = 'Y-m-d'): ?string
+    public function convertDate(string $value, string $format = 'Y-m-d'): ?string
     {
         $nullables = ['n/a', 'boot_time'];
         if (empty($value) || isset(array_flip($nullables)[strtolower($value)])) {
@@ -1179,21 +1242,18 @@ class Converter
             'd.m.Y',
             'Ymd'
         ];
-        try {
-            while ($current = array_shift($formats)) {
-                $d = \DateTime::createFromFormat($current, $value);
-                if ($d !== false) {
-                    break;
-                }
-            }
 
+        while ($current = array_shift($formats)) {
+            $d = DateTime::createFromFormat($current, $value);
             if ($d !== false) {
-                return $d->format($format);
+                break;
             }
-            return $value;
-        } catch (\Exception $e) {
-            throw $e;
         }
+
+        if ($d !== false) {
+            return $d->format($format);
+        }
+        return $value;
     }
 
     /**
@@ -1201,9 +1261,12 @@ class Converter
      *
      * @return void
      */
-    public function loadSchemaPatterns()
+    public function loadSchemaPatterns(): void
     {
         $string = file_get_contents($this->getSchemaPath());
+        if ($string === false) {
+            throw new RuntimeException('Unable to read schema file');
+        }
         $json = json_decode($string, true);
 
         $this->schema_patterns['networks_types'] = explode(
@@ -1219,12 +1282,16 @@ class Converter
     /**
      * Convert battery capacity
      *
-     * @param string $capacity Inventoried capacity
+     * @param integer|string $capacity Inventoried capacity
      *
      * @return integer|false
      */
     public function convertBatteryPower($capacity)
     {
+        if (is_int($capacity)) {
+            return $capacity;
+        }
+
         $capa_pattern = "/^([0-9]+(\.[0-9]+)?) Wh$/i";
         $matches = [];
         if (preg_match($capa_pattern, $capacity, $matches)) {
@@ -1237,7 +1304,7 @@ class Converter
             return (int)$matches[1];
         }
 
-        if (ctype_digit($capacity)) {
+        if (is_string($capacity) && ctype_digit($capacity)) {
             return (int)$capacity;
         }
 
@@ -1257,7 +1324,7 @@ class Converter
      *
      * @return integer|false
      */
-    public function convertBatteryVoltage($voltage)
+    public function convertBatteryVoltage(string $voltage)
     {
         $volt_pattern = "/^([0-9]+(\.[0-9]+)?) ?V$/i";
         $matches = [];
@@ -1279,11 +1346,59 @@ class Converter
     }
 
     /**
+     * Convert memory capacity
+     *
+     * @param string $capacity Inventoried capacity
+     *
+     * @return ?integer
+     */
+    public function convertMemory(string $capacity)
+    {
+        if (is_int($casted_capa = $this->getCastedValue($capacity, 'integer'))) {
+            return $casted_capa;
+        }
+
+        $mem_pattern = "/^([0-9]+([\.|,][0-9])?) ?(.?B)$/i";
+
+        $matches = [];
+        if (preg_match($mem_pattern, $capacity, $matches)) {
+            //we got a memory with a unit. first, convert to bytes
+            $real_value = $this->getCastedValue($matches[1], 'integer');
+            switch (strtolower($matches[3])) {
+                case 'pb':
+                    $real_value *= 1024;
+                    //no break, continue to next
+                case 'tb':
+                    $real_value *= 1024;
+                    //no break, continue to next
+                case 'gb':
+                    $real_value *= 1024;
+                    //no break, continue to next
+                case 'mb':
+                    $real_value *= 1024;
+                    //no break, continue to next
+                case 'kb':
+                    $real_value *= 1024;
+                    //no break, continue to next
+                case 'b':
+                    break;
+                default:
+                    return null;
+            }
+
+            //then return as Mb.
+            return $real_value / 1024 / 1024;
+        }
+
+        return null;
+    }
+
+    /**
      * Handle network inventory XML format
      *
-     * @param array $data Contents
+     * @param array<string, mixed> $data Contents
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function convertNetworkInventory(array $data): array
     {
@@ -1317,6 +1432,9 @@ class Converter
                     }
                     if (isset($device_info['id'])) {
                         $device_info['id'] = (int)$device_info['id'];
+                    }
+                    if (isset($device_info['comments'])) {
+                        $device_info['description'] = $device_info['comments'];
                     }
 
                     //Fix network inventory type
@@ -1362,6 +1480,7 @@ class Converter
                                 case 'Computer':
                                 case 'Phone':
                                 case 'Printer':
+                                case 'Unmanaged':
                                     $itemtype = $device_info['type'];
                                     break;
                                 case 'Networking':
@@ -1372,7 +1491,7 @@ class Converter
                                     $itemtype = 'NetworkEquipment';
                                     break;
                                 default:
-                                    throw new \RuntimeException('Unhandled device type: ' . $device_info['type']);
+                                    throw new RuntimeException('Unhandled device type: ' . $device_info['type']);
                             }
                         }
                         $data['itemtype'] = $itemtype;
@@ -1414,11 +1533,19 @@ class Converter
                             $netport['connections'] = array_is_list($netport['connections']['connection']) ?
                                 $netport['connections']['connection'] :
                                 [$netport['connections']['connection']];
+
+                            //replace bad typed values...
+                            foreach ($netport['connections'] as &$connection) {
+                                if (isset($connection['ifnumber'])) {
+                                    $connection['ifnumber'] = $this->getCastedValue($connection['ifnumber'], 'integer');
+                                }
+                            }
                         }
                         if (isset($netport['aggregate'])) {
-                            $netport['aggregate'] = array_is_list($netport['aggregate']['port']) ?
-                                $netport['aggregate']['port'] :
-                                [$netport['aggregate']['port']];
+                            $netport['aggregate'] = is_array($netport['aggregate']['port'])
+                                && array_is_list($netport['aggregate']['port'])
+                                ? $netport['aggregate']['port']
+                                : [$netport['aggregate']['port']];
                             $netport['aggregate'] = array_map('intval', $netport['aggregate']);
                         }
 
@@ -1440,7 +1567,7 @@ class Converter
                 case 'modems':
                 case 'simcards':
                     //first, retrieve data from device
-                    $elements = $device[$key];
+                    $elements = $device_data;
                     if (!array_is_list($elements)) {
                         $elements = [$elements];
                     }
@@ -1484,10 +1611,12 @@ class Converter
                     break;
                 case "cartridges":
                 case "pagecounters":
-                    $data['content'][$key] = $device[$key];
+                case "drives":
+                case "error":
+                    $data['content'][$key] = $device_data;
                     break;
                 default:
-                    throw new \RuntimeException('Key ' . $key . ' is not handled in network devices conversion');
+                    throw new RuntimeException('Key ' . $key . ' is not handled in network devices conversion');
             }
         }
 
@@ -1502,9 +1631,9 @@ class Converter
     /**
      * Pre-handle network inventory XML format
      *
-     * @param array $data Contents
+     * @param array<string, mixed> $data Contents
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function convertNetworkDiscovery(array $data): array
     {
@@ -1515,11 +1644,11 @@ class Converter
 
         $device = &$data['content']['device'];
         if (!isset($device['info'])) {
-            $device['info'] = ['type' => 'Computer'];
+            $device['info'] = ['type' => 'Unmanaged'];
         }
         $device_info = &$data['content']['device']['info'];
 
-        if (isset($device['snmphostname']) && !empty($device['snmphostname'])) {
+        if (!empty($device['snmphostname'])) {
             //SNMP hostname has precedence
             if (isset($device['dnshostname'])) {
                 unset($device['dnshostname']);
@@ -1529,7 +1658,7 @@ class Converter
             }
         }
 
-        if (isset($device['netbiosname']) && !empty($device['netbiosname']) && isset($device['dnshostname'])) {
+        if (!empty($device['netbiosname']) && isset($device['dnshostname'])) {
             //NETBIOS name has precedence
             unset($device['dnshostname']);
         }
@@ -1549,7 +1678,7 @@ class Converter
                 case 'dnshostname':
                 case 'snmphostname':
                 case 'netbiosname':
-                    $device_info['name'] = $device[$key];
+                    $device_info['name'] = $device_data;
                     unset($device[$key]);
                     break;
                 case 'entity':
@@ -1558,7 +1687,7 @@ class Converter
                     //not used
                     break;
                 case 'ips':
-                    $device_info['ips'] = $device[$key];
+                    $device_info['ips'] = $device_data;
                     unset($device[$key]);
                     break;
                 case 'mac':
@@ -1571,26 +1700,27 @@ class Converter
                 case 'type':
                 case 'description':
                 case 'serial':
-                    $device_info[$key] = $device[$key];
+                case 'assettag':
+                    $device_info[$key] = $device_data;
                     unset($device[$key]);
                     break;
                 case 'netportvendor':
                     //translate as manufacturer - if not present
                     if (!isset($device['manufacturer'])) {
-                        $device_info['manufacturer'] = $device[$key];
+                        $device_info['manufacturer'] = $device_data;
                     }
                     unset($device[$key]);
                     break;
                 case 'workgroup':
-                    $data['content']['hardware']['workgroup'] = $device[$key];
+                    $data['content']['hardware']['workgroup'] = $device_data;
                     unset($device[$key]);
                     break;
                 case 'authsnmp':
-                    $device_info['credentials'] = $device[$key];
+                    $device_info['credentials'] = $device_data;
                     unset($device[$key]);
                     break;
                 default:
-                    throw new \RuntimeException('Key ' . $key . ' is not handled in network discovery conversion');
+                    throw new RuntimeException('Key ' . $key . ' is not handled in network discovery conversion');
             }
         }
 
@@ -1600,7 +1730,7 @@ class Converter
     /**
      * Explode old pciid to vendorid:productid
      *
-     * @param array $data Node data
+     * @param array<string, mixed> $data Node data
      *
      * @return void
      */
@@ -1623,7 +1753,7 @@ class Converter
     /**
      * Is a network inventory?
      *
-     * @param array $data Data
+     * @param array<string, mixed> $data Data
      *
      * @return boolean
      */
@@ -1635,7 +1765,7 @@ class Converter
     /**
      * Is a network discovery?
      *
-     * @param array $data Data
+     * @param array<string, mixed> $data Data
      *
      * @return boolean
      */

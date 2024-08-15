@@ -12,6 +12,7 @@ return array(
     'Twig\\Extra\\String\\' => array($vendorDir . '/twig/string-extra'),
     'Twig\\' => array($vendorDir . '/twig/twig/src'),
     'TrueBV\\' => array($vendorDir . '/true/punycode/src'),
+    'TheNetworg\\OAuth2\\Client\\' => array($vendorDir . '/thenetworg/oauth2-azure/src'),
     'Symfony\\Polyfill\\Php82\\' => array($vendorDir . '/symfony/polyfill-php82'),
     'Symfony\\Polyfill\\Php81\\' => array($vendorDir . '/symfony/polyfill-php81'),
     'Symfony\\Polyfill\\Php80\\' => array($vendorDir . '/symfony/polyfill-php80'),
@@ -54,6 +55,7 @@ return array(
     'Monolog\\' => array($vendorDir . '/monolog/monolog/src/Monolog'),
     'Michelf\\' => array($vendorDir . '/michelf/php-markdown/Michelf'),
     'LitEmoji\\' => array($vendorDir . '/elvanto/litemoji/src'),
+    'League\\OAuth2\\Client\\' => array($vendorDir . '/league/oauth2-client/src', $vendorDir . '/league/oauth2-google/src'),
     'League\\Csv\\' => array($vendorDir . '/league/csv/src'),
     'Laminas\\Validator\\' => array($vendorDir . '/laminas/laminas-validator/src'),
     'Laminas\\Stdlib\\' => array($vendorDir . '/laminas/laminas-stdlib/src'),
@@ -68,5 +70,6 @@ return array(
     'GuzzleHttp\\Promise\\' => array($vendorDir . '/guzzlehttp/promises/src'),
     'GuzzleHttp\\' => array($vendorDir . '/guzzlehttp/guzzle/src'),
     'Glpi\\' => array($baseDir . '/src'),
+    'Firebase\\JWT\\' => array($vendorDir . '/firebase/php-jwt/src'),
     'Brick\\Math\\' => array($vendorDir . '/brick/math/src'),
 );

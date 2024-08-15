@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -85,6 +85,38 @@ if (!$parent->getFromDB($parents_id)) {
 
 // Render template content using twig
 $template->fields['content'] = $template->getRenderedContent($parent);
+
+//load taskcategorie name (use to create OPTION dom)
+//need when template is used and when GLPI preselected type if defined
+$template->fields['taskcategories_name'] = "";
+if ($template->fields['taskcategories_id']) {
+    $entityRestrict = getEntitiesRestrictCriteria(getTableForItemType(TaskCategory::getType()), "", $parent->fields['entities_id'], true);
+
+    $taskcategory = new TaskCategory();
+    if (
+        $taskcategory->getFromDBByCrit([
+            "id" => $template->fields['taskcategories_id'],
+        ] + $entityRestrict)
+    ) {
+        $template->fields['taskcategories_name'] = Dropdown::getDropdownName(
+            getTableForItemType(TaskCategory::getType()),
+            $template->fields['taskcategories_id'],
+            0,
+            true,
+            false,
+            //default value like "(id)" is the default behavior of GLPI when field 'name' is empty
+            "(" . $template->fields['taskcategories_id'] . ")"
+        );
+    }
+}
+
+if ($template->fields['groups_id_tech'] == 0) {
+    unset($template->fields['groups_id_tech']);
+}
+
+if ($template->fields['users_id_tech'] == 0) {
+    unset($template->fields['users_id_tech']);
+}
 
 // Return json response with the template fields
 echo json_encode($template->fields);

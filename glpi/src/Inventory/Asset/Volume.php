@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @copyright 2010-2022 by the FusionInventory Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
@@ -37,8 +37,8 @@
 namespace Glpi\Inventory\Asset;
 
 use Glpi\Inventory\Conf;
+use Glpi\Toolbox\Sanitizer;
 use Item_Disk;
-use Toolbox;
 
 class Volume extends InventoryAsset
 {
@@ -120,6 +120,7 @@ class Volume extends InventoryAsset
      */
     protected function getExisting(): array
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $db_existing = [];
@@ -159,10 +160,11 @@ class Volume extends InventoryAsset
             foreach ($db_itemdisk as $keydb => $arraydb) {
                 unset($arraydb['is_dynamic']);
                 if ($db_elt == $arraydb) {
-                    $input = $this->handleInput($val) + [
+                    $itemDisk->getFromDB($keydb);
+                    $input = $this->handleInput($val, $itemDisk) + [
                         'id'           => $keydb,
                     ];
-                    $itemDisk->update(Toolbox::addslashes_deep($input));
+                    $itemDisk->update(Sanitizer::sanitize($input));
                     unset($value[$key]);
                     unset($db_itemdisk[$keydb]);
                     break;
@@ -181,12 +183,12 @@ class Volume extends InventoryAsset
         }
         if (count($value)) {
             foreach ($value as $val) {
-                $input = $this->handleInput($val) + [
+                $input = $this->handleInput($val, $itemDisk) + [
                     'items_id'     => $this->item->fields['id'],
                     'itemtype'     => $this->item->getType()
                 ];
 
-                $itemDisk->add(Toolbox::addslashes_deep($input));
+                $itemDisk->add(Sanitizer::sanitize($input));
             }
         }
     }
@@ -213,5 +215,10 @@ class Volume extends InventoryAsset
     {
         $this->conf = $conf;
         return $conf->import_volume == 1;
+    }
+
+    public function getItemtype(): string
+    {
+        return \Item_Disk::class;
     }
 }

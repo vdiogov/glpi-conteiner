@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -461,7 +461,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
 
         $preparedInput = $this->prepareInput($input);
 
-        if (isset($preparedInput['error'])) {
+        if (isset($preparedInput['error']) && !isset($input['_no_message'])) {
             Session::addMessageAfterRedirect($preparedInput['error'], false, ERROR);
         }
 
@@ -479,7 +479,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
 
         $preparedInput = $this->prepareInput($input);
 
-        if (isset($preparedInput['error'])) {
+        if (isset($preparedInput['error']) && !isset($input['_no_message'])) {
             Session::addMessageAfterRedirect($preparedInput['error'], false, ERROR);
         }
 
@@ -506,7 +506,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
     }
 
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
 
         if ($this->networkUpdate) {
@@ -610,7 +610,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
      * @param integer $version    version of IP to look (only use when using arrays or string as input for
      *                            address or netmask n(default 0)
      *
-     * @return array  of networks found. If we want request several field, the return value will be
+     * @return false|array  of networks found. If we want request several field, the return value will be
      *                an array of array
      *
      * \warning The order of the elements inside the result are ordered from the nearest one to the
@@ -624,6 +624,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
         $recursive = true,
         $version = 0
     ) {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (empty($relation)) {
@@ -678,7 +679,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
 
             if ($relation == "equals") {
                 for ($i = $startIndex; $i < 4; ++$i) {
-                    $WHERE = [
+                    $WHERE[] = [
                         new \QueryExpression("(" . $DB->quoteName($addressDB[$i]) . " & " . $DB->quoteValue($netmaskPa[$i]) . ") = (" . $DB->quoteValue($addressPa[$i]) . " & " . $DB->quoteValue($netmaskPa[$i]) . ")"),
                         $netmaskDB[$i]  => $netmaskPa[$i]
                     ];
@@ -691,7 +692,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
                         $globalNetmask = $DB->quoteName($netmaskDB[$i]);
                     }
 
-                    $WHERE = [
+                    $WHERE[] = [
                         new \QueryExpression("(" . $DB->quoteName($addressDB[$i]) . " & $globalNetmask) = (" . $DB->quoteValue($addressPa[$i]) . " & $globalNetmask)"),
                         new \QueryExpression("(" . $DB->quoteValue($netmaskPa[$i]) . " & " . $DB->quoteName($netmaskDB[$i]) . ")=$globalNetmask")
                     ];
@@ -703,6 +704,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
             $entityID = $_SESSION['glpiactive_entity'];
         }
         $entitiesID = [];
+        $ORDER_ORIENTATION = '';
         switch ($relation) {
             case "is contained by":
                 $ORDER_ORIENTATION = 'ASC';
@@ -719,7 +721,6 @@ class IPNetwork extends CommonImplicitTreeDropdown
                 break;
 
             case "equals":
-                $ORDER_ORIENTATION = '';
                 if ($recursive) {
                     $entitiesID = getSonsAndAncestorsOf('glpi_entities', $entityID);
                 }
@@ -805,6 +806,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
      **/
     public function getCriteriaForMatchingElement($tableName, $binaryFieldPrefix, $versionField)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $version = $this->fields["version"];
@@ -832,7 +834,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
      * @param IPAddress|integer[] $networkNetmask  (see \ref parameterType) the netmask of the network
      * @param integer             $version         of IP : only usefull for binary array as input (default 0)
      *
-     * @return true if the network owns the IP address
+     * @return boolean true if the network owns the IP address
      **/
     public static function checkIPFromNetwork($address, $networkAddress, $networkNetmask, $version = 0)
     {
@@ -1038,6 +1040,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
      **/
     public static function recreateTree()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // Reset the tree
@@ -1179,6 +1182,7 @@ class IPNetwork extends CommonImplicitTreeDropdown
      **/
     public static function showIPNetworkProperties($entities_id = -1, $value = 0)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $rand = mt_rand();

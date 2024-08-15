@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -158,6 +158,7 @@ class Request extends AbstractRequest
      */
     public function getParams($data)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $this->inventory = new Inventory();
@@ -191,6 +192,7 @@ class Request extends AbstractRequest
      */
     public function prolog($data)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if ($this->headers->hasHeader('GLPI-Agent-ID')) {
@@ -201,7 +203,7 @@ class Request extends AbstractRequest
             ];
         } else {
             $response = [
-                'PROLOG_FREQ'  => self::DEFAULT_FREQUENCY,
+                'PROLOG_FREQ'  => $CFG_GLPI['inventory_frequency'] ?? self::DEFAULT_FREQUENCY,
                 'RESPONSE'     => 'SEND'
             ];
         }
@@ -303,6 +305,7 @@ class Request extends AbstractRequest
      */
     public function contact($data)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $this->inventory = new Inventory();
@@ -343,6 +346,7 @@ class Request extends AbstractRequest
      */
     public function inventory($data)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if ($this->isDiscovery()) {
@@ -362,7 +366,11 @@ class Request extends AbstractRequest
 
         if ($this->inventory->inError()) {
             foreach ($this->inventory->getErrors() as $error) {
-                $this->addError($error, 500);
+                $error_code = 500;
+                if (str_contains($error, "JSON does not validate")) {
+                    $error_code = 400;
+                }
+                $this->addError($error, $error_code);
             }
         } else {
             if ($this->headers->hasHeader('GLPI-Agent-ID')) {

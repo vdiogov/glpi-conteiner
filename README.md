@@ -1,11 +1,11 @@
 ## GLPI Free Asset and IT Management Software Containerization
 
-GLPI Version: 10.0.3
+GLPI Version: 10.0.16
 PHP: 8.1
 Mariadb
 
 Docker: OK
-Kubernetes: in progress
+Kubernetes: OK
 # DOCKER SETUP
 
 STEP 1: build

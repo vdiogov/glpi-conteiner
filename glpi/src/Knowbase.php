@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -103,6 +103,7 @@ class Knowbase extends CommonGLPI
     public static function showSearchView()
     {
 
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        // Search a solution
@@ -146,23 +147,41 @@ class Knowbase extends CommonGLPI
      **/
     public static function showBrowseView()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $rand        = mt_rand();
         $ajax_url    = $CFG_GLPI["root_doc"] . "/ajax/knowbase.php";
-        $loading_txt = addslashes(__('Loading...'));
-        $start       = isset($_REQUEST['start'])
-                        ? $_REQUEST['start']
-                        : 0;
+        $loading_txt = __s('Loading...');
+        $start       = (int)($_REQUEST['start'] ?? 0);
+        $cat_id      = (int)($_GET["knowbaseitemcategories_id"] ?? $_SESSION['kb_cat_id'] ?? 0);
 
         $category_list = json_encode(self::getTreeCategoryList());
-        $no_cat_found  = __("No category found");
+        $no_cat_found  = __s("No category found");
 
         $JS = <<<JAVASCRIPT
          $(function() {
+            var loadingindicator  = $("<div class='loadingindicator'>$loading_txt</div>");
+            $('#items_list$rand').html(loadingindicator); // loadingindicator on doc ready
+            var loadNode = function(cat_id) {
+               $('#items_list$rand').html(loadingindicator);
+               $('#items_list$rand').load('$ajax_url', {
+                  'action': 'getItemslist',
+                  'cat_id': cat_id,
+                  'start': $start
+               });
+            };
+
             $('#tree_category$rand').fancytree({
                // load plugins
-               extensions: ['filter', 'glyph'],
+               extensions: ['filter', 'glyph', 'persist'],
+
+               persist: {
+                  cookiePrefix: 'fancytree-kb-',
+                  expandLazy: true,
+                  overrideSource: true,
+                  store: "auto"
+               },
 
                // Scroll node into visible area, when focused by keyboard
                autoScroll: true,
@@ -193,17 +212,8 @@ class Knowbase extends CommonGLPI
 
             });
 
-            var loadingindicator  = $("<div class='loadingindicator'>$loading_txt</div>");
-            $('#items_list$rand').html(loadingindicator); // loadingindicator on doc ready
-            var loadNode = function(cat_id) {
-               $('#items_list$rand').html(loadingindicator);
-               $('#items_list$rand').load('$ajax_url', {
-                  'action': 'getItemslist',
-                  'cat_id': cat_id,
-                  'start': $start
-               });
-            };
-            loadNode(0);
+            loadNode($cat_id);
+            $.ui.fancytree.getTree("#tree_category$rand").activateKey($cat_id);
 
             $(document).on('keyup', '#browser_tree_search$rand', function() {
                var search_text = $(this).val();
@@ -231,6 +241,7 @@ JAVASCRIPT;
     public static function getTreeCategoryList()
     {
 
+        /** @var \DBmysql $DB */
         global $DB;
 
         $cat_table = KnowbaseItemCategory::getTable();
@@ -335,7 +346,7 @@ JAVASCRIPT;
         )->current();
         $categories[] = [
             'id'          => 0,
-            'name'        => __('Root category'),
+            'name'        => __s('Root category'),
             'items_count' => $root_items_count['cpt'],
         ];
 
@@ -353,7 +364,7 @@ JAVASCRIPT;
             ];
 
             if ($category['items_count'] > 0) {
-                $node['title'] .= ' <span class="badge bg-azure-lt" title="' . __('This category contains articles') . '">'
+                $node['title'] .= ' <span class="badge bg-azure-lt" title="' . __s('This category contains articles') . '">'
                 . $category['items_count']
                 . '</span>';
             }

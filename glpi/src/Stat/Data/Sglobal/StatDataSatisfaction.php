@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -48,7 +48,7 @@ class StatDataSatisfaction extends StatDataAlwaysDisplay
         parent::__construct($params);
 
         $opensatisfaction   = $this->getDataByType($params, "inter_opensatisfaction");
-        $answersatisfaction = $this->getDataByType($params, "answersatisfaction");
+        $answersatisfaction = $this->getDataByType($params, "inter_answersatisfaction");
 
         $this->labels = array_keys($opensatisfaction);
         $this->series = [

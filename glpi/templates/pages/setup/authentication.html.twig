@@ -5,7 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2022 Teclib' and contributors.
+ # @copyright 2015-2024 Teclib' and contributors.
  # @copyright 2003-2014 by the INDEPNET Development Team.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
@@ -52,11 +52,9 @@
                      <span>{{ 'AuthLDAP'|itemtype_name }}</span>
                   </a>
                {% else %}
-                  <div class="list-group-item">
-                     <div class="list-group-item alert alert-important alert-warning m-3">
-                        <i class="fa-fw fa fa-exclamation-triangle me-2"></i>
-                        {{ __('The LDAP extension of your PHP parser isn’t installed') }}
-                     </div>
+                  <div class="alert alert-important alert-warning m-3">
+                    <i class="fa-fw fa fa-exclamation-triangle me-2"></i>
+                    {{ __('The LDAP extension of your PHP parser isn’t installed') }}
                   </div>
                {% endif %}
 

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -38,6 +38,12 @@ use Glpi\Stat\Data\Graph\StatDataSatisfactionSurvey;
 use Glpi\Stat\Data\Graph\StatDataTicketAverageTime;
 use Glpi\Stat\Data\Graph\StatDataTicketNumber;
 
+/**
+ * @var array $CFG_GLPI
+ * @var \DBmysql $DB
+ */
+global $CFG_GLPI, $DB;
+
 include('../inc/includes.php');
 
 Html::header(__('Statistics'), $_SERVER['PHP_SELF'], "helpdesk", "stat");
@@ -48,6 +54,15 @@ if (!$item = getItemForItemtype($_GET['itemtype'])) {
     exit;
 }
 
+//sanitize dates
+foreach (['date1', 'date2'] as $key) {
+    if (array_key_exists($key, $_GET) && preg_match('/\d{4}-\d{2}-\d{2}/', (string)$_GET[$key]) !== 1) {
+        unset($_GET[$key]);
+    }
+    if (array_key_exists($key, $_POST) && preg_match('/\d{4}-\d{2}-\d{2}/', (string)$_POST[$key]) !== 1) {
+        unset($_POST[$key]);
+    }
+}
 if (empty($_POST["date1"]) && empty($_POST["date2"])) {
     if (isset($_GET["date1"])) {
         $_POST["date1"] = $_GET["date1"];
@@ -80,6 +95,10 @@ $showuserlink = 0;
 if (Session::haveRight('user', READ)) {
     $showuserlink = 1;
 }
+
+$val1   = null;
+$val2   = null;
+$values = [];
 
 switch ($_GET["type"]) {
     case "technicien":
@@ -374,7 +393,7 @@ echo "<table class='tab_cadre'>";
 echo "<tr class='tab_bg_2'><td class='right'>" . __('Start date') . "</td><td>";
 Html::showDateField("date1", ['value' => $_POST["date1"]]);
 echo "</td><td rowspan='2' class='center'>";
-echo "<input type='hidden' name='itemtype' value=\"" . $_GET['itemtype'] . "\">";
+echo "<input type='hidden' name='itemtype' value=\"" . htmlspecialchars($_GET['itemtype']) . "\">";
 echo "<input type='submit' class='btn btn-primary' value=\"" . __s('Display report') . "\"></td></tr>";
 
 echo "<tr class='tab_bg_2'><td class='right'>" . __('End date') . "</td><td>";
@@ -382,14 +401,13 @@ Html::showDateField("date2", ['value' => $_POST["date2"]]);
 echo "</td></tr>";
 echo "</table></div>";
 
-// form using GET method : CRSF not needed
 Html::closeForm();
 
 $stat_params = [
     'itemtype' => $_GET['itemtype'],
-    'date1'    => $_GET['date1'],
-    'date2'    => $_GET['date2'],
-    'type'     => $_GET['$type'],
+    'date1'    => $_POST['date1'],
+    'date2'    => $_POST['date2'],
+    'type'     => $_GET['type'],
     'val1'     => $val1,
     'val2'     => $val2,
 ];

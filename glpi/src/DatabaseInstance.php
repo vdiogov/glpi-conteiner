@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -94,6 +94,7 @@ class DatabaseInstance extends CommonDBTM
 
     public function getDatabases(): array
     {
+        /** @var \DBmysql $DB */
         global $DB;
         $dbs = [];
 
@@ -114,6 +115,7 @@ class DatabaseInstance extends CommonDBTM
 
     public function showForm($ID, array $options = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $rand = mt_rand();
@@ -235,7 +237,7 @@ class DatabaseInstance extends CommonDBTM
         echo "</td></tr>\n";
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td><label for='dropdown_groups_id_tech$rand'>" . __('Group in charge of the hardware') . "</label></td>";
+        echo "<td><label for='dropdown_groups_id_tech$rand'>" . __('Group in charge') . "</label></td>";
         echo "<td>";
         Group::dropdown([
             'name'      => 'groups_id_tech',
@@ -257,7 +259,7 @@ class DatabaseInstance extends CommonDBTM
         echo "</textarea></td></tr>";
 
         echo "<tr class='tab_bg_1'>";
-        echo "<td><label for='dropdown_users_id_tech$rand'>" . __('Technician in charge of the hardware') . "</label></td>";
+        echo "<td><label for='dropdown_users_id_tech$rand'>" . __('Technician in charge') . "</label></td>";
         echo "<td>";
         User::dropdown(['name'   => 'users_id_tech',
             'value'  => $this->fields["users_id_tech"],
@@ -285,6 +287,22 @@ class DatabaseInstance extends CommonDBTM
                 'maybeempty' => true
             ]
         );
+        echo "</td></tr>\n";
+
+        echo "<tr class='tab_bg_1'>";
+        echo "<td><label for='port$rand'>" . _n('Port', 'Ports', 1) . "</label></td>";
+        echo "<td>";
+        echo Html::input('port', [
+            'value' => $this->fields['port'],
+            'id'    => "port$rand"
+        ]);
+        echo "</td>";
+        echo "<td><label for='path$rand'>" . __('Path') . "</label></td>";
+        echo "<td>";
+        echo Html::input('path', [
+            'value' => $this->fields['path'],
+            'id'    => "path$rand"
+        ]);
         echo "</td></tr>\n";
 
         $this->showInventoryInfo();
@@ -356,6 +374,14 @@ class DatabaseInstance extends CommonDBTM
             'searchtype'       => 'equals',
             'additionalfields' => ['itemtype'],
             'joinparams'       => ['jointype' => 'child']
+        ];
+
+        $tab[] = [
+            'id'                 => '6',
+            'table'              => DatabaseInstance::getTable(),
+            'field'              => 'version',
+            'name'               => _n('Version', 'Versions', 1),
+            'datatype'           => 'text'
         ];
 
         $tab[] = [
@@ -456,8 +482,11 @@ class DatabaseInstance extends CommonDBTM
                 if ($itemtype !== null && class_exists($itemtype)) {
                     if ($values[$field] > 0) {
                         $item = new $itemtype();
-                        $item->getFromDB($values[$field]);
-                        return "<a href='" . $item->getLinkURL() . "'>" . $item->fields['name'] . "</a>";
+                        if ($item->getFromDB($values[$field])) {
+                            return "<a href='" . $item->getLinkURL() . "'>" . $item->fields['name'] . "</a>";
+                        } else {
+                            return ' ';
+                        }
                     }
                 } else {
                     return ' ';
@@ -477,6 +506,7 @@ class DatabaseInstance extends CommonDBTM
      */
     public static function getTypes($all = false): array
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $types = $CFG_GLPI['databaseinstance_types'];
@@ -537,6 +567,7 @@ class DatabaseInstance extends CommonDBTM
 
     public static function showInstances(CommonDBTM $item, $withtemplate)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $instances = $DB->request([
@@ -554,6 +585,10 @@ class DatabaseInstance extends CommonDBTM
             echo "<table class='tab_cadre_fixehov'>";
             $header = "<tr>";
             $header .= "<th>" . __('Name') . "</th>";
+            $header .= "<th>" . Database::getTypeName(1) . "</th>";
+            $header .= "<th>" . _n('Version', 'Versions', 1) . "</th>";
+            $header .= "<th>" . DatabaseInstanceType::getTypeName(0) . "</th>";
+            $header .= "<th>" . Manufacturer::getTypeName(0) . "</th>";
             $header .= "<th></th>";
             $header .= "</tr>";
             echo $header;
@@ -561,10 +596,23 @@ class DatabaseInstance extends CommonDBTM
             foreach ($instances as $row) {
                 $item = new self();
                 $item->getFromDB($row['id']);
-                echo "<tr lass='tab_bg_1'>";
+                echo "<tr class='tab_bg_1" . ($item->fields['is_deleted'] ? '_2' : '') . "'>";
                 echo "<td>" . $item->getLink() . "</td>";
                 $databases = $item->getDatabases();
                 echo "<td>" . sprintf(_n('%1$d database', '%1$d databases', count($databases)), count($databases)) . "</td>";
+                echo "<td>" . $item->fields['version'] . "</td>";
+                $databasetype = new DatabaseInstanceType();
+                $databasetype_name = '';
+                if ($item->fields['databaseinstancetypes_id'] > 0 && $databasetype->getFromDB($item->fields['databaseinstancetypes_id'])) {
+                    $databasetype_name = $databasetype->fields['name'];
+                }
+                echo "<td>" . $databasetype_name . "</td>";
+                $manufacturer = new Manufacturer();
+                $manufacturer_name = '';
+                if ($item->fields['manufacturers_id'] > 0 && $manufacturer->getFromDB($item->fields['manufacturers_id'])) {
+                    $manufacturer_name = $manufacturer->fields['name'];
+                }
+                echo "<td>" . $manufacturer_name . "</td>";
                 echo "</tr>";
             }
             echo $header;

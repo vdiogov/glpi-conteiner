@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,7 +36,7 @@
 class Item_DeviceCamera_ImageFormat extends CommonDBRelation
 {
     public static $itemtype_1 = 'Item_DeviceCamera';
-    public static $items_id_1 = 'item_devicecameras_id';
+    public static $items_id_1 = 'items_devicecameras_id';
 
     public static $itemtype_2 = 'ImageFormat';
     public static $items_id_2 = 'imageformats_id';
@@ -55,7 +55,7 @@ class Item_DeviceCamera_ImageFormat extends CommonDBRelation
                     $nb = countElementsInTable(
                         self::getTable(),
                         [
-                            'item_devicecameras_id' => $item->getID()
+                            'items_devicecameras_id' => $item->getID()
                         ]
                     );
                 }
@@ -66,7 +66,7 @@ class Item_DeviceCamera_ImageFormat extends CommonDBRelation
 
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
-        self::showItems($item, $withtemplate);
+        self::showItems($item);
         return true;
     }
 
@@ -87,7 +87,11 @@ class Item_DeviceCamera_ImageFormat extends CommonDBRelation
      */
     public static function showItems(DeviceCamera $camera)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $ID = $camera->getID();
         $rand = mt_rand();
@@ -103,7 +107,7 @@ class Item_DeviceCamera_ImageFormat extends CommonDBRelation
         $items = $DB->request([
             'FROM'   => Item_DeviceCamera_ImageFormat::getTable(),
             'WHERE'  => [
-                'item_devicecameras_id' => $camera->getID()
+                'items_devicecameras_id' => $camera->getID()
             ]
         ]);
         $link = new self();

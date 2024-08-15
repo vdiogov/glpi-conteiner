@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -42,7 +42,11 @@ use Glpi\Cache\CacheManager;
 use Glpi\System\RequirementsManager;
 use Glpi\Toolbox\VersionParser;
 
-// Be sure to use global objects if this file is included outside normal process
+/**
+ * @var array $CFG_GLPI
+ * @var \GLPI $GLPI;
+ * @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE
+ */
 global $CFG_GLPI, $GLPI, $GLPI_CACHE;
 
 include_once(GLPI_ROOT . "/inc/based_config.php");
@@ -65,12 +69,21 @@ $GLPI_CACHE = $cache_manager->getCoreCacheInstance();
 
 Config::detectRootDoc();
 
-if (!isset($skip_db_check) && !file_exists(GLPI_CONFIG_DIR . "/config_db.php")) {
+if ($skip_db_check ?? false) {
+    $missing_db_config = false;
+} elseif (!file_exists(GLPI_CONFIG_DIR . "/config_db.php")) {
+    $missing_db_config = true;
+} else {
+    include_once(GLPI_CONFIG_DIR . "/config_db.php");
+    $missing_db_config = !class_exists('DB', false);
+}
+
+if ($missing_db_config) {
     Session::loadLanguage('', false);
 
     // no translation
     $title_text        = 'GLPI seems to not be configured properly.';
-    $missing_conf_text = sprintf('Database configuration file "%s" is missing.', GLPI_CONFIG_DIR . '/config_db.php');
+    $missing_conf_text = sprintf('Database configuration file "%s" is missing or is corrupted.', GLPI_CONFIG_DIR . '/config_db.php');
     $hint_text         = 'You have to either restart the install process, either restore this file.';
 
     if (!isCommandLine()) {
@@ -139,7 +152,13 @@ if (!isset($skip_db_check) && !file_exists(GLPI_CONFIG_DIR . "/config_db.php")) 
     Toolbox::setDebugMode();
 
     if (isset($_SESSION["glpiroot"]) && $CFG_GLPI["root_doc"] != $_SESSION["glpiroot"]) {
-        Html::redirect($_SESSION["glpiroot"]);
+        // When `$_SESSION["glpiroot"]` differs from `$CFG_GLPI["root_doc"]`, it means that
+        // either web server configuration changed,
+        // either session was initialized on another GLPI instance.
+        // Destroy session and redirect to login to ensure that session from another GLPI instance is not reused.
+        Session::destroy();
+        Auth::setRememberMeCookie('');
+        Html::redirectToLogin();
     }
 
     if (!isset($_SESSION["glpilanguage"])) {
@@ -179,10 +198,13 @@ if (!isset($skip_db_check) && !file_exists(GLPI_CONFIG_DIR . "/config_db.php")) 
     }
     // Check version
     if (!isset($_GET["donotcheckversion"]) && !Update::isDbUpToDate()) {
+        // Prevent debug bar to be displayed when an admin user was connected with debug mode when codebase was updated.
+        Toolbox::setDebugMode(Session::NORMAL_MODE);
+
         Session::loadLanguage('', false);
 
         if (isCommandLine()) {
-            echo __('The version of the database is not compatible with the version of the installed files. An update is necessary.');
+            echo __('The GLPI codebase has been updated. The update of the GLPI database is necessary.');
             echo "\n";
             exit();
         }
@@ -194,6 +216,7 @@ if (!isset($skip_db_check) && !file_exists(GLPI_CONFIG_DIR . "/config_db.php")) 
             echo "<div class='col-12 col-xxl-6'>";
             echo "<div class='card text-center mb-4'>";
 
+            /** @var \DBmysql $DB */
             global $DB;
             $core_requirements = (new RequirementsManager())->getCoreRequirementList($DB);
             TemplateRenderer::getInstance()->display(
@@ -224,7 +247,7 @@ if (!isset($skip_db_check) && !file_exists(GLPI_CONFIG_DIR . "/config_db.php")) 
                         echo Config::agreeUnstableMessage(VersionParser::isDevVersion(GLPI_VERSION));
                     }
                     echo "<p class='mt-2 mb-n2 alert alert-important alert-warning'>";
-                    echo __('The version of the database is not compatible with the version of the installed files. An update is necessary.') . "</p>";
+                    echo __('The GLPI codebase has been updated. The update of the GLPI database is necessary.') . "</p>";
                     echo Html::submit(_sx('button', 'Upgrade'), [
                         'name'  => 'from_update',
                         'class' => "btn btn-primary",

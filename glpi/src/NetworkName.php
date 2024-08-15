@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -32,6 +32,8 @@
  *
  * ---------------------------------------------------------------------
  */
+
+use Glpi\Application\View\TemplateRenderer;
 
 /**
  * NetworkName Class
@@ -67,6 +69,11 @@ class NetworkName extends FQDNLabel
         return _n('Network name', 'Network names', $nb);
     }
 
+    public function useDeletedToLockIfDynamic()
+    {
+        return false;
+    }
+
 
     public function defineTabs($options = [])
     {
@@ -79,7 +86,6 @@ class NetworkName extends FQDNLabel
 
         return $ong;
     }
-
 
     /**
      * Print the network name form
@@ -101,68 +107,26 @@ class NetworkName extends FQDNLabel
             $options['entities_id'] = $lastItem->getField('entities_id');
         }
 
-        $this->showFormHeader($options);
-
-        echo "<tr class='tab_bg_1'><td>";
+        $recursive_items_type_data = _n('Associated element', 'Associated elements', Session::getPluralNumber());
         if (count($recursiveItems) > 0) {
-            $this->displayRecursiveItems($recursiveItems, 'Type');
+            $recursive_items_type_data = $this->displayRecursiveItems($recursiveItems, 'Type', false);
         }
-        echo "</td>\n<td colspan='3'>";
 
-        if (!($ID > 0)) {
-            echo "<input type='hidden' name='items_id' value='" . $this->fields["items_id"] . "'>\n";
-            echo "<input type='hidden' name='itemtype' value='" . $this->fields["itemtype"] . "'>\n";
-        }
-        $this->displayRecursiveItems($recursiveItems, "Link");
+        $display_recursive_items_link = $this->displayRecursiveItems($recursiveItems, 'Link', false);
+        $display_dissociate_btn = false;
         if ((count($recursiveItems) > 0) && $this->canUpdate()) {
-            Html::showSimpleForm(
-                $this->getFormURL(),
-                'unaffect',
-                _sx('button', 'Dissociate'),
-                ['id' => $ID]
-            );
+            $display_dissociate_btn = true;
         }
 
-        echo "</td></tr>\n";
 
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Name') . "</td><td>\n";
-        echo Html::input('name', ['value' => $this->fields['name']]);
-        echo "</td>\n";
-
-        echo "<td>" . FQDN::getTypeName(1) . "</td><td>";
-        Dropdown::show(
-            getItemTypeForTable(getTableNameForForeignKeyField("fqdns_id")),
-            ['value'       => $this->fields["fqdns_id"],
-                'name'        => 'fqdns_id',
-                'entity'      => $this->getEntityID(),
-                'displaywith' => ['view']
-            ]
-        );
-        echo "</td>\n</tr>\n";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . IPAddress::getTypeName(Session::getPluralNumber());
-        IPAddress::showAddChildButtonForItemForm($this, '_ipaddresses');
-        echo "</td>";
-        echo "<td>";
-        IPAddress::showChildsForItemForm($this, '_ipaddresses');
-        echo "</td>\n";
-
-        echo "<td rowspan='3'>" . __('Comments') . "</td>";
-        echo "<td rowspan='3'><textarea class='form-control' rows='4' name='comment' >" . $this->fields["comment"];
-        echo "</textarea></td>\n";
-        echo "</tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . IPNetwork::getTypeName(Session::getPluralNumber()) . "</td><td>";
-        echo __('IP network is not included in the database. However, you can see current available networks.');
-        echo "</td></tr>";
-        echo "<tr class='tab_bg_1'><td>&nbsp;</td><td>";
-        IPNetwork::showIPNetworkProperties($this->getEntityID(), $this->fields['ipnetworks_id']);
-        echo "</td></tr>\n";
-
-        $this->showFormButtons($options);
+        TemplateRenderer::getInstance()->display('components/form/networkname.html.twig', [
+            'ID'                            => $ID,
+            'display_dissociate_btn'        => $display_dissociate_btn,
+            'recursive_items_type_data'     => $recursive_items_type_data,
+            'display_recursive_items_link'  => $display_recursive_items_link,
+            'item'                          => $this,
+            'params'                        => $options,
+        ]);
 
         return true;
     }
@@ -198,7 +162,7 @@ class NetworkName extends FQDNLabel
             'table'              => $this->getTable(),
             'field'              => 'itemtype',
             'name'               => _n('Type', 'Types', 1),
-            'datatype'           => 'itemtype',
+            'datatype'           => 'itemtypename',
             'massiveaction'      => false
         ];
 
@@ -307,8 +271,9 @@ class NetworkName extends FQDNLabel
     }
 
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $this->post_workOnItem();
@@ -361,6 +326,7 @@ class NetworkName extends FQDNLabel
      **/
     public static function unaffectAddressesOfItem($items_id, $itemtype)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -433,7 +399,11 @@ class NetworkName extends FQDNLabel
      **/
     public static function showFormForNetworkPort($networkPortID)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $name         = new self();
         $number_names = 0;
@@ -505,25 +475,25 @@ class NetworkName extends FQDNLabel
         );
         echo "</td>\n";
 
-        echo "</tr><tr class='tab_bg_1'>\n";
+        echo "</tr>";
 
-        echo "<td>" . IPAddress::getTypeName(Session::getPluralNumber());
-        IPAddress::showAddChildButtonForItemForm($name, 'NetworkName__ipaddresses');
-        echo "</td>";
-        echo "<td>";
-        IPAddress::showChildsForItemForm($name, 'NetworkName__ipaddresses');
-        echo "</td>";
+        if ($name->isNewItem()) {
+            $canedit = $name->canCreate();
+        } else {
+            $canedit = $name->can($name->getID(), UPDATE);
+        }
 
-       // MoYo : really need to display it here ?
-       // make confure because not updatable
-       // echo "<td>".IPNetwork::getTypeName(Session::getPluralNumber())."&nbsp;";
-       // Html::showToolTip(__('IP network is not included in the database. However, you can see current available networks.'));
-       // echo "</td><td>";
-       // IPNetwork::showIPNetworkProperties($name->getEntityID());
-       // echo "</td>\n";
-        echo "<td colspan='2'>&nbsp;</td>";
-
-        echo "</tr>\n";
+        if ($canedit) {
+            echo "<tr class='tab_bg_1'>\n";
+            echo "<td>" . IPAddress::getTypeName(Session::getPluralNumber());
+            IPAddress::showAddChildButtonForItemForm($name, 'NetworkName__ipaddresses', $canedit);
+            echo "</td>";
+            echo "<td>";
+            IPAddress::showChildsForItemForm($name, 'NetworkName__ipaddresses', $canedit);
+            echo "</td>";
+            echo "<td colspan='2'>&nbsp;</td>";
+            echo "</tr>\n";
+        }
     }
 
 
@@ -595,6 +565,7 @@ class NetworkName extends FQDNLabel
         HTMLTableCell $father = null,
         array $options = []
     ) {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $column_name = __CLASS__;
@@ -817,6 +788,7 @@ class NetworkName extends FQDNLabel
         }
 
         $table_options = ['createRow' => true];
+        $start = 0;
 
         if (
             ($item->getType() == 'FQDN')
@@ -824,8 +796,6 @@ class NetworkName extends FQDNLabel
         ) {
             if (isset($_GET["start"])) {
                 $start = $_GET["start"];
-            } else {
-                $start = 0;
             }
 
             if (!empty($_GET["order"])) {
@@ -935,6 +905,7 @@ class NetworkName extends FQDNLabel
      **/
     public static function countForItem(CommonDBTM $item)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         switch ($item->getType()) {

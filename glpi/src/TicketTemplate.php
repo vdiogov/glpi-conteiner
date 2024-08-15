@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -59,7 +59,7 @@ class TicketTemplate extends ITILTemplate
         ];
     }
 
-    public static function getExtraAllowedFields($withtypeandcategory = 0, $withitemtype = 0)
+    public static function getExtraAllowedFields($withtypeandcategory = false, $withitemtype = false)
     {
         $itil_object = new Ticket();
         $tab =  [
@@ -69,11 +69,6 @@ class TicketTemplate extends ITILTemplate
                 'glpi_requesttypes'
             )
                                                        => 'requesttypes_id',
-            $itil_object->getSearchOptionIDByField(
-                'field',
-                'completename',
-                'glpi_locations'
-            ) => 'locations_id',
             $itil_object->getSearchOptionIDByField(
                 'field',
                 'slas_id_tto',
@@ -96,11 +91,6 @@ class TicketTemplate extends ITILTemplate
             )      => 'olas_id_ttr',
             $itil_object->getSearchOptionIDByField(
                 'field',
-                'time_to_resolve',
-                'glpi_tickets'
-            )   => 'time_to_resolve',
-            $itil_object->getSearchOptionIDByField(
-                'field',
                 'time_to_own',
                 'glpi_tickets'
             )   => 'time_to_own',
@@ -114,11 +104,6 @@ class TicketTemplate extends ITILTemplate
                 'internal_time_to_own',
                 'glpi_tickets'
             )   => 'internal_time_to_own',
-            $itil_object->getSearchOptionIDByField(
-                'field',
-                'actiontime',
-                'glpi_tickets'
-            )   => 'actiontime',
             $itil_object->getSearchOptionIDByField(
                 'field',
                 'global_validation',
@@ -152,7 +137,7 @@ class TicketTemplate extends ITILTemplate
                     return true;
 
                 case 2:
-                    $item->showHelpdeskPreview($item);
+                    static::showHelpdeskPreview($item);
                     return true;
             }
         }

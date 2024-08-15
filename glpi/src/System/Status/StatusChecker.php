@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -118,6 +118,7 @@ final class StatusChecker
      * @param bool $as_array True if the service check result should be returned as an array instead of a plain-text string.
      * @return array|string An array or string with the result based on the $as_array parameter value.
      * @since 10.0.0
+     * @FIXME Remove deprecated plain text output in GLPI 10.1.
      */
     public static function getServiceStatus(?string $service, $public_only = true, $as_array = true)
     {
@@ -271,7 +272,7 @@ final class StatusChecker
                         $ldap = null;
                         try {
                             if (
-                                AuthLDAP::tryToConnectToServer(
+                                @AuthLDAP::tryToConnectToServer(
                                     $method,
                                     $method['rootdn'],
                                     (new \GLPIKey())->decrypt($method['rootdn_passwd'])
@@ -380,6 +381,7 @@ final class StatusChecker
      */
     public static function getCASStatus($public_only = true): array
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         static $status = null;
@@ -444,7 +446,7 @@ final class StatusChecker
                                 $status['servers'][$mc['name']] = [
                                     'status' => self::STATUS_OK
                                 ];
-                            } catch (\Exception $e) {
+                            } catch (\Throwable $e) {
                                 $status['servers'][$mc['name']] = [
                                     'status'       => self::STATUS_PROBLEM,
                                     'error_code'   => $e->getCode(),
@@ -615,7 +617,6 @@ final class StatusChecker
      * Format the given full service status result as a plain-text output compatible with previous versions of GLPI.
      * @param array $status
      * @return string
-     * @deprecated 10.0.0
      */
     private static function getPlaintextOutput(array $status): string
     {

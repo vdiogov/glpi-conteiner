@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -94,6 +94,11 @@ abstract class LevelAgreement extends CommonDBChild
                 break;
         }
         return [$dateField, $laField];
+    }
+
+    public static function getWaitingFieldName(): string
+    {
+        return static::$prefix . '_waiting_duration';
     }
 
     public function defineTabs($options = [])
@@ -198,7 +203,8 @@ abstract class LevelAgreement extends CommonDBChild
         echo "<tr class='tab_bg_1'><td>" . __('Maximum time') . "</td>";
         echo "<td>";
         Dropdown::showNumber("number_time", ['value' => $this->fields["number_time"],
-            'min'   => 0
+            'min'   => 0,
+            'max'   => 1000
         ]);
         $possible_values = self::getDefinitionTimeValues();
         $rand = Dropdown::showFromArray(
@@ -325,6 +331,7 @@ abstract class LevelAgreement extends CommonDBChild
      */
     public static function showForSLM(SLM $slm)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!$slm->can($slm->fields['id'], READ)) {
@@ -431,6 +438,7 @@ abstract class LevelAgreement extends CommonDBChild
                     ]
                 );
                 echo "</td>";
+                $link = '';
                 if ($slm->fields['use_ticket_calendar']) {
                     $link = __('Calendar of the ticket');
                 } else if (!$slm->fields['calendars_id']) {
@@ -461,6 +469,7 @@ abstract class LevelAgreement extends CommonDBChild
      */
     public function showRulesList()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $fk      = static::getFieldNames($this->fields['type'])[1];
@@ -594,6 +603,7 @@ abstract class LevelAgreement extends CommonDBChild
      */
     public function getDataForTicket($tickets_id, $type)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         list($dateField, $field) = static::getFieldNames($type);
@@ -794,12 +804,11 @@ abstract class LevelAgreement extends CommonDBChild
 
         if (isset($this->fields['id'])) {
             $cal          = new Calendar();
-            $work_in_days = ($this->fields['definition_time'] == 'day');
 
            // Based on a calendar
             if ($this->fields['calendars_id'] > 0) {
                 if ($cal->getFromDB($this->fields['calendars_id'])) {
-                    return $cal->getActiveTimeBetween($start, $end, $work_in_days);
+                    return $cal->getActiveTimeBetween($start, $end);
                 }
             } else { // No calendar
                 $timestart = strtotime($start);
@@ -833,7 +842,7 @@ abstract class LevelAgreement extends CommonDBChild
                     return $cal->computeEndDate(
                         $start_date,
                         $delay,
-                        $additional_delay,
+                        (int) $additional_delay,
                         $work_in_days,
                         $this->fields['end_of_working_day']
                     );
@@ -843,7 +852,7 @@ abstract class LevelAgreement extends CommonDBChild
            // No calendar defined or invalid calendar
             if ($this->fields['number_time'] >= 0) {
                 $starttime = strtotime($start_date);
-                $endtime   = $starttime + $delay + $additional_delay;
+                $endtime   = $starttime + $delay + (int) $additional_delay;
                 return date('Y-m-d H:i:s', $endtime);
             }
         }
@@ -851,6 +860,19 @@ abstract class LevelAgreement extends CommonDBChild
         return null;
     }
 
+    /**
+     * Should calculation on this LevelAgreement target date be done using
+     * the "work_in_day" parameter set to true ?
+     *
+     * @return bool
+     */
+    public function shouldUseWorkInDayMode(): bool
+    {
+        return
+            $this->fields['definition_time'] == 'day'
+            || $this->fields['definition_time'] == 'month'
+        ;
+    }
 
     /**
      * Get execution date of a level
@@ -870,22 +892,39 @@ abstract class LevelAgreement extends CommonDBChild
 
             if ($level->getFromDB($levels_id)) { // level exists
                 if ($level->fields[$fk] == $this->fields['id']) { // correct level
-                    $work_in_days = ($this->fields['definition_time'] == 'day' || $this->fields['definition_time'] == 'month');
                     $delay        = $this->getTime();
 
-                   // Based on a calendar
+                    // Based on a calendar
                     if ($this->fields['calendars_id'] > 0) {
                         $cal = new Calendar();
                         if ($cal->getFromDB($this->fields['calendars_id']) && $cal->hasAWorkingDay()) {
-                            return $cal->computeEndDate(
+                            // Take SLA into account
+                            $date_with_sla = $cal->computeEndDate(
                                 $start_date,
                                 $delay,
-                                $level->fields['execution_time'] + $additional_delay,
-                                $work_in_days
+                                0,
+                                $this->shouldUseWorkInDayMode(),
+                                $this->fields['end_of_working_day']
                             );
+
+                            // Take waiting duration time into account
+                            $date_with_waiting_time = $cal->computeEndDate(
+                                $date_with_sla,
+                                $additional_delay,
+                            );
+
+                            // Take current SLA escalation level into account
+                            $date_with_sla_and_escalation_level = $cal->computeEndDate(
+                                $date_with_waiting_time,
+                                $level->fields['execution_time'],
+                                0,
+                                $level->shouldUseWorkInDayMode(),
+                            );
+
+                            return $date_with_sla_and_escalation_level;
                         }
                     }
-                   // No calendar defined or invalid calendar
+                    // No calendar defined or invalid calendar
                     $delay    += $additional_delay + $level->fields['execution_time'];
                     $starttime = strtotime($start_date);
                     $endtime   = $starttime + $delay;
@@ -1013,8 +1052,33 @@ abstract class LevelAgreement extends CommonDBChild
 
         if ($levels_id) {
             $toadd = [];
+
+            // Compute start date
+            if ($pre === "ola") {
+                // OLA have their own start date which is set when the OLA is added to the ticket
+                if (
+                    (int) $this->fields['type'] === SLM::TTO
+                    && $ticket->fields['ola_tto_begin_date'] !== null
+                ) {
+                    $date_field = "ola_tto_begin_date";
+                } elseif (
+                    (int) $this->fields['type'] === SLM::TTR
+                    && $ticket->fields['ola_ttr_begin_date'] !== null
+                ) {
+                    $date_field = "ola_ttr_begin_date";
+                } else {
+                    // Fall back to default date in case the specific date fields
+                    // are not set (which may be the case for tickets created
+                    // before their addition)
+                    $date_field = 'date';
+                }
+            } else {
+                // SLA are based on the ticket opening date
+                $date_field = 'date';
+            }
+
             $date = $this->computeExecutionDate(
-                $ticket->fields['date'],
+                $ticket->fields[$date_field],
                 $levels_id,
                 $ticket->fields[$pre . '_waiting_duration']
             );
@@ -1038,6 +1102,7 @@ abstract class LevelAgreement extends CommonDBChild
      **/
     public static function deleteLevelsToDo(Ticket $ticket)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $ticketfield = static::$prefix . "levels_id_ttr";
@@ -1059,6 +1124,7 @@ abstract class LevelAgreement extends CommonDBChild
 
     public function cleanDBonPurge()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // Clean levels
@@ -1083,5 +1149,63 @@ abstract class LevelAgreement extends CommonDBChild
         }
 
         Rule::cleanForItemAction($this);
+    }
+
+    /**
+     * Getter for the protected $levelclass static property
+     *
+     * @return string
+     */
+    public function getLevelClass(): string
+    {
+        return static::$levelclass;
+    }
+
+    /**
+     * Getter for the protected $levelticketclass static property
+     *
+     * @return string
+     */
+    public function getLevelTicketClass(): string
+    {
+        return static::$levelticketclass;
+    }
+
+    /**
+     * Remove level of previously assigned level agreements for a given ticket
+     *
+     * @param int $tickets_id
+     *
+     * @return void
+     */
+    public function clearInvalidLevels(int $tickets_id): void
+    {
+        // CLear levels of others LA of the same type
+        // e.g. if a new LA TTR was assigned, clear levels from others (= previous) LA TTR
+        $level_ticket_class = $this->getLevelTicketClass();
+        $level_class = $this->getLevelClass();
+        $levels = (new $level_ticket_class())->find([
+            'tickets_id' => $tickets_id,
+            [$level_class::getForeignKeyField() => ['!=', $this->getID()]],
+            [
+                $level_class::getForeignKeyField() => new QuerySubQuery([
+                    'SELECT' => 'id',
+                    'FROM' => $level_class::getTable(),
+                    'WHERE' => [
+                        static::getForeignKeyField() => new QuerySubQuery([
+                            'SELECT' => 'id',
+                            'FROM' => static::getTable(),
+                            'WHERE' => ['type' => $this->fields['type']],
+                        ])
+                    ]
+                ]),
+            ]
+        ]);
+
+        // Delete invalid levels
+        foreach ($levels as $level) {
+            $em = new $level_ticket_class();
+            $em->delete(['id' => $level['id']]);
+        }
     }
 }

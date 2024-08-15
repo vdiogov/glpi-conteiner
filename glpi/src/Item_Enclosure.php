@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -40,8 +40,8 @@ class Item_Enclosure extends CommonDBRelation
     public static $itemtype_2 = 'itemtype';
     public static $items_id_2 = 'items_id';
     public static $checkItem_1_Rights = self::DONT_CHECK_ITEM_RIGHTS;
-    public static $mustBeAttached_1      = false;
-    public static $mustBeAttached_2      = false;
+    public static $mustBeAttached_1 = false; // FIXME It make no sense for an enclosure item to not be attached to an Enclosure.
+    public static $mustBeAttached_2 = false; // FIXME It make no sense for an enclosure item to not be attached to an Item.
 
     public static function getTypeName($nb = 0)
     {
@@ -60,7 +60,7 @@ class Item_Enclosure extends CommonDBRelation
 
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
-        self::showItems($item, $withtemplate);
+        self::showItems($item);
         return true;
     }
 
@@ -71,6 +71,7 @@ class Item_Enclosure extends CommonDBRelation
      **/
     public static function showItems(Enclosure $enclosure)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $ID = $enclosure->getID();
@@ -171,7 +172,11 @@ class Item_Enclosure extends CommonDBRelation
 
     public function showForm($ID, array $options = [])
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         echo "<div class='center'>";
 
@@ -305,7 +310,7 @@ class Item_Enclosure extends CommonDBRelation
      *
      * @param array $input Input data
      *
-     * @return array
+     * @return false|array
      */
     private function prepareInput($input)
     {

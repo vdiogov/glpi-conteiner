@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -49,7 +49,7 @@ class DomainsPluginToCoreCommand extends AbstractPluginToCoreCommand
     {
         parent::configure();
 
-        $this->setName('glpi:migration:domains_plugin_to_core');
+        $this->setName('migration:domains_plugin_to_core');
         $this->setDescription(__('Migrate Domains plugin data into GLPI core tables'));
     }
 
@@ -94,6 +94,7 @@ class DomainsPluginToCoreCommand extends AbstractPluginToCoreCommand
     protected function migratePlugin(): void
     {
         //prevent infocom creation from general setup
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
         if (isset($CFG_GLPI["auto_create_infocoms"]) && $CFG_GLPI["auto_create_infocoms"]) {
             $CFG_GLPI['auto_create_infocoms'] = false;

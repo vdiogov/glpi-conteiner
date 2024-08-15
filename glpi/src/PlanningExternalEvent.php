@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -140,6 +140,7 @@ class PlanningExternalEvent extends CommonDBTM implements CalDAVCompatibleItemIn
 
     public function showForm($ID, array $options = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $canedit    = $this->can($ID, UPDATE);
@@ -157,7 +158,7 @@ class PlanningExternalEvent extends CommonDBTM implements CalDAVCompatibleItemIn
         $this->showFormHeader($options);
 
         $is_ajax  = isset($options['from_planning_edit_ajax']) && $options['from_planning_edit_ajax'];
-        $is_rrule = strlen($this->fields['rrule']) > 0;
+        $is_rrule = strlen($this->fields['rrule'] ?? '') > 0;
 
        // set event for another user
         if (
@@ -202,9 +203,7 @@ class PlanningExternalEvent extends CommonDBTM implements CalDAVCompatibleItemIn
                   }
                   $("#dropdown_background{$rand}").trigger("setValue", data.background);
                   if (data.text.length > 0) {
-                     if (contenttinymce = tinymce.get("text{$rand}")) {
-                        contenttinymce.setContent(data.text);
-                     }
+                     setRichTextEditorContent("text{$rand}", data.text);
                   }
 
                   // set planification fields
@@ -389,16 +388,6 @@ JAVASCRIPT;
         return $values;
     }
 
-    public function cleanDBonPurge()
-    {
-
-        $this->deleteChildrenAndRelationsFromDb(
-            [
-                VObject::class,
-            ]
-        );
-    }
-
     public static function getGroupItemsAsVCalendars($groups_id)
     {
 
@@ -426,6 +415,7 @@ JAVASCRIPT;
     private static function getItemsAsVCalendars(array $criteria)
     {
 
+        /** @var \DBmysql $DB */
         global $DB;
 
         $query = [
@@ -489,5 +479,51 @@ JAVASCRIPT;
     public function rawSearchOptions()
     {
         return $this->trait_rawSearchOptions();
+    }
+
+
+    public static function getVisibilityCriteria(): array
+    {
+        if (Session::haveRight(Planning::$rightname, Planning::READALL)) {
+            return [];
+        }
+
+        $condition = [
+            'OR' => [
+                self::getTableField('users_id') => $_SESSION['glpiID'],
+                self::getTableField('users_id_guests') => ['LIKE', '%"' . $_SESSION['glpiID'] . '"%'],
+            ]
+        ];
+
+        if (Session::haveRight(Planning::$rightname, Planning::READGROUP)) {
+            $groups = $_SESSION['glpigroups'];
+            if (count($groups)) {
+                $users = Group_User::getGroupUsers($groups);
+                $users_id = [];
+                foreach ($users as $data) {
+                    $users_id[] = $data['id'];
+                }
+                $condition['OR'][self::getTableField('users_id')] = $users_id;
+            }
+        }
+
+        return $condition;
+    }
+
+
+    public static function addVisibilityRestrict()
+    {
+        $criteria = self::getVisibilityCriteria();
+        if (!count($criteria)) {
+            return;
+        }
+        $criteria['FROM'] = self::getTable();
+
+        $it = new \DBmysqlIterator(null);
+        $it->buildQuery($criteria);
+        $sql = $it->getSql();
+        $sql = preg_replace('/.*WHERE /', '', $sql);
+
+        return $sql;
     }
 }

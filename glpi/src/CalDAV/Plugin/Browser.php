@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,6 +35,7 @@
 
 namespace Glpi\CalDAV\Plugin;
 
+use Config;
 use Glpi\CalDAV\Traits\CalDAVUriUtilTrait;
 use Sabre\DAV\Browser\Plugin;
 use Sabre\HTTP\RequestInterface;
@@ -71,8 +72,6 @@ class Browser extends Plugin
             return false;
         }
 
-        $user = $this->getPrincipalItemFromUri($authPlugin->getCurrentPrincipal());
-
-        return $user instanceof \User && \Session::DEBUG_MODE == $user->fields['use_mode'];
+        return Config::canUpdate();
     }
 }

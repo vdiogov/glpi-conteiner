@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -44,7 +44,7 @@ class RefusedEquipment extends CommonDBTM
 
    // From CommonDBTM
     public $dohistory                   = true;
-    public static $rightname                   = 'config';
+    public static $rightname                   = 'refusedequipment';
 
     public static function getTypeName($nb = 0)
     {
@@ -115,7 +115,7 @@ class RefusedEquipment extends CommonDBTM
             'table'         => $this->getTable(),
             'field'         => 'ip',
             'name'          => __('IP'),
-            'datatype'      => 'string',
+            'datatype'      => 'text',
             'massiveaction' => false,
         ];
 
@@ -124,7 +124,7 @@ class RefusedEquipment extends CommonDBTM
             'table'         => $this->getTable(),
             'field'         => 'mac',
             'name'          => __('MAC'),
-            'datatype'      => 'string',
+            'datatype'      => 'text',
             'massiveaction' => false,
         ];
 
@@ -170,6 +170,7 @@ class RefusedEquipment extends CommonDBTM
 
     public function showForm($ID, array $options = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $this->initForm($ID, $options);

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -48,10 +48,6 @@ class Item_SoftwareVersion extends CommonDBRelation
     public static $log_history_2_add    = Log::HISTORY_INSTALL_SOFTWARE;
     public static $log_history_2_delete = Log::HISTORY_UNINSTALL_SOFTWARE;
 
-    public function useDeletedToLockIfDynamic()
-    {
-        return false;
-    }
 
     public static function getTypeName($nb = 0)
     {
@@ -262,6 +258,7 @@ class Item_SoftwareVersion extends CommonDBRelation
 
     public function updateDatasForItem($itemtype, $items_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $item = new $itemtype();
@@ -292,6 +289,7 @@ class Item_SoftwareVersion extends CommonDBRelation
      **/
     public static function countForVersion($softwareversions_id, $entity = '')
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $item_version_table = self::getTable(__CLASS__);
@@ -354,6 +352,7 @@ class Item_SoftwareVersion extends CommonDBRelation
      **/
     public static function countForSoftware($softwares_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -456,7 +455,11 @@ class Item_SoftwareVersion extends CommonDBRelation
      **/
     private static function showInstallations($searchID, $crit)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         if (!Software::canView() || !$searchID) {
             return;
@@ -861,6 +864,7 @@ class Item_SoftwareVersion extends CommonDBRelation
      **/
     public static function showForVersionByEntity(SoftwareVersion $version)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $softwareversions_id = $version->getField('id');
@@ -914,6 +918,7 @@ class Item_SoftwareVersion extends CommonDBRelation
      */
     public static function getFromItem(CommonDBTM $item, $sort = null, $order = null, array $filters = []): DBmysqlIterator
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $selftable     = self::getTable(__CLASS__);
@@ -1009,12 +1014,13 @@ class Item_SoftwareVersion extends CommonDBRelation
      * Show software installed on a computer
      *
      * @param Computer $comp         Computer object
-     * @param boolean  $withtemplate template case of the view process
+     * @param integer  $withtemplate template case of the view process
      *
      * @return void
      **/
     public static function showForItem(CommonDBTM $item, $withtemplate = 0)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!Software::canView()) {
@@ -1378,7 +1384,7 @@ class Item_SoftwareVersion extends CommonDBRelation
      * @param array   $data         data used to display
      * @param string  $itemtype     Type of the item
      * @param integer $items_id     ID of the item
-     * @param boolean $withtemplate template case of the view process
+     * @param integer $withtemplate template case of the view process
      * @param boolean $canedit      user can edit software ?
      * @param boolean $display      display and calculate if true or just calculate
      *
@@ -1392,6 +1398,7 @@ class Item_SoftwareVersion extends CommonDBRelation
         $canedit,
         $display
     ) {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $ID    = $data["id"];
@@ -1510,7 +1517,7 @@ class Item_SoftwareVersion extends CommonDBRelation
      * Display a software for a License (not installed)
      *
      * @param array   $data         data used to display
-     * @param boolean $withtemplate template case of the view process
+     * @param integer $withtemplate template case of the view process
      * @param boolean $canedit      user can edit software ?
      *
      * @return void
@@ -1580,7 +1587,7 @@ class Item_SoftwareVersion extends CommonDBRelation
      *
      * @return void
      **/
-    public function upgrade($instID, $softwareversions_id, $dohistory = 1)
+    public function upgrade($instID, $softwareversions_id, $dohistory = true)
     {
 
         if ($this->getFromDB($instID)) {
@@ -1679,6 +1686,7 @@ class Item_SoftwareVersion extends CommonDBRelation
 
     public static function countForItem(CommonDBTM $item)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $params = self::getListForItemParams($item);

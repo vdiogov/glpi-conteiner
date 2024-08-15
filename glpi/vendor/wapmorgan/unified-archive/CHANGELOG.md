@@ -1,9 +1,87 @@
 # Change Log
 
-### 1.1.4 - Dec 21, 2021
+## 1.1.8 - Nov 20, 2022
+Fixed:
+- Fixed opening an archive with password (#37)
+- Fixed `UnifiedArchive->getComment()` now returns null when comment is not supported by driver (#39)
+- Fixed `UnifiedArchive->getFileData()->modificationTime` is integer timestamp now in case of NelexaZip driver instead of DateTimeImmutable (#38)
+- Fixed `PharData::create` for zip-archives
+
+Deprecations:
+- Renamed methods of `UnifiedArchive`:
+  - `getFileNames` => `getFiles`
+  - `extractFiles` => `extract`
+  - `addFiles` => `add`
+  - `deleteFiles` => `delete`
+  - `archiveFiles` => `archive`
+  - `canOpenArchive` => `canOpen`
+  - Old methods are marked as deprecated and will be deleted in future releases.
+- Marked as deprecated:
+  - `UnifiedArchive::detectArchiveType` - use `Formats::detectArchiveFormat` instead
+  - `UnifiedArchive::archiveDirectory`/`archiveFile` - use `UnifiedArchive::archive` instead
+  - `UnifiedArchive::canCreateType` - `Formats::canCreate`
+
+New functions:
+- Added method to get file extension for format: `Formats::getFormatExtension($archiveFormat)`
+- Added method to get info about ready to archive files: `UnifiedArchive->prepareForArchiving($fileOrFiles, $archiveName = null)`
+- Added method to create archive in memory: `UnifiedArchive::createInString()` and `BasicDriver::CREATE_IN_STRING` ability constant
+- Added new pure driver for Zip/Tar(gz/bz2) - SplitbrainPhpArchive.
+
+## 1.1.7 - Jul 31, 2022
+- `open` does not throw an Exception, it returns null
+- returned deleted methods in UnifiedArchive: `canOpenArchive`, `canOpenType`, `canCreateType`, `getArchiveType`, `detectArchiveType`, `getFileResource`, `getArchiveFormat`, `isFileExists`, `getArchiveSize`, `countCompressedFilesSize`, `countUncompressedFilesSize`.
+
+## 1.1.6 - Jul 31, 2022
+**BC-breaking changes**:
+- Changed signature: `UnifiedArchive::open($filename, string|null $password = null)` => `UnifiedArchive::open($filename, array $abilities = [], string|null $password = null)`. Right now if second argument is string, it will be treated as password (for BC-compatability).
+- `open` throws an Exception when format is not recognized or there's no driver that support requested abilities.
+- `addFiles`/`deleteFiles`/`getComment`/`setComment` throws an Exception when driver does not support this ability.
+- Deleted methods in UnifiedArchive: `canOpenArchive`, `canOpenType`, `canCreateType`, `getArchiveType`, `detectArchiveType`, `getFileResource`, `getArchiveFormat`, `isFileExists`, `getArchiveSize`, `countCompressedFilesSize`, `countUncompressedFilesSize`.
+
+**New features**:
+- Added passing needed abilities to **UnifiedArchive::open()** to select a better driver:
+    ```php
+    use wapmorgan\UnifiedArchive\Drivers\Basic\BasicDriver;
+
+    # opens an array with driver, that supports content streaming and appending
+    $archive = \wapmorgan\UnifiedArchive\UnifiedArchive::open('archive.7z', [BasicDriver::STREAM_CONTENT, BasicDriver::APPEND]);
+    # if not specified, uses OPEN or OPEN_ENCRYPTED check, if password passed
+    ```
+- Added `UnifiedArchive::test($files = [])` (and `cam files:test` command) to test archive contents (compare actual control sum with stored crc32).
+- More informative output in commands: `system:drivers`, `system:formats`, `system:format`, added command `files:test`.
+- Added driver abilities to select better driver.
+
+**Driver changes:**
+- Added `NelexaZip` pure-PHP driver.
+- Added `Iso` driver extraction ability.
+- Added commenting-ability for `SevenZip` driver (via `descript.ion` file in archive).
+
+## 1.1.5 - Jun 28, 2022
+
+**New features**:
+- Reimplemented `cam` (console utility) - now it's on symfony/console and supports all features and more functions (folders, types) of UA.
+- Added more detailed installation instructions (`./vendor/bin/cam system:drivers`) of specific drivers: AlchemyZippy, Cab, Iso, Lzma, Rar, SevenZip, TarByPear.
+- Added ability to track progress of archive creation - new argument `?callable $fileProgressCallable` of `UnifiedArchive::archiveFiles()`.
+- Added ability to **pass few directories to be placed in one in-archive directory** in archiving/appending (`addFiles()`/`archiveFiles()`)
+    ```php
+    [
+        '' => ['./folder1', './folder2'],
+        'README.md' => './subfolder/README.md'
+    ] # Archive will have all folder1, folder2 contents in the root and README.md
+    ```
+
+**Fixed**:
+- Fixed `extract()` and `listContent()` and their result of **PclZip** interface (`UnifiedArchive::getPclZipInterface()`) to correspond to original library (object => array).
+- Added tests on archiving, extraction and for PclZip-interface.
+
+**Format changes**:
+- Fixed counting of extracted files when extracting the whole archive in `TarByPear, TarByPhar, Zip`.
+- Fixed calculation archive entry compressed size (approximately) and modification time, implemented entry content streaming in `TarByPhar`.
+
+## 1.1.4 - Dec 21, 2021
 Disabled `rar` for SevenZip driver.
 
-### 1.1.3 - May 2, 2021
+## 1.1.3 - May 2, 2021
 
 **Changed format of `$files` in `archiveFiles()` and `addFiles()`**
 ```php
@@ -54,14 +132,14 @@ $file_data = $a['filename'];
 - `UnifiedArchive->getFileResource` -> `UnifiedArchive->getFileStream`.
 - `UnifiedArchive->isFileExists` -> `UnifiedArchive->hasFile`.
 
-### 1.1.2 - Mar 1, 2021
+## 1.1.2 - Mar 1, 2021
 Fixed calculation of tar's uncompressed size opened via `TarByPear` driver.
 Fixed working with *tar.xz* archives.
 
-### 1.1.1 - Feb 13, 2021
+## 1.1.1 - Feb 13, 2021
 Cleaned package.
 
-### 1.1.0 - Feb 13, 2021
+## 1.1.0 - Feb 13, 2021
 **New features**:
 - Added ability to open archives encrypted with password - added `$password` argument to `UnifiedArchive::open($fileName, $password = null)`. Works only with: zip, rar, 7z.   
 - Added ability to adjust compression level for new archives - added `$compressionLevel` argument (with default `BasicDriver::COMPRESSION_AVERAGE` level) to:
@@ -87,17 +165,16 @@ Cleaned package.
 - `UnifiedArchive::canOpenArchive` -> `UnifiedArchive::canOpen`
 - `UnifiedArchive::canCreateType` -> `Formats::canCreate`
 - `UnifiedArchive->getArchiveType` -> `UnifiedArchive->getArchiveFormat`
+- Old methods exist, but marked as deprecated.
 
-Old methods exist, but marked as deprecated.
-
-### 1.0.1 - Nov 28, 2020
+## 1.0.1 - Nov 28, 2020
 
 - Improved extendable for all classes - used late-static binding everywhere.
 
 Format specific:
 - **gzip**: improved detection of archive by content.
 
-### 1.0.0 - Jun 13, 2020
+## 1.0.0 - Jun 13, 2020
 
 Format specific:
 - **tar**:
@@ -105,7 +182,7 @@ Format specific:
 - **rar**:
    - Exclude directories from files list.
 
-### 0.2.0 - Feb 2, 2020
+## 0.2.0 - Feb 2, 2020
 
 **BC-breaking changes**:
 - **Deleted deprecated UnifiedArchive methods**: `extractNode`, `archiveNodes`.
@@ -125,7 +202,7 @@ Format specific:
         - `UnsupportedOperationException`
         - `ArchiveCreationException`
 
-### 0.1.3 - Jan 13, 2020
+## 0.1.3 - Jan 13, 2020
 
 **BC-breaking changes**:
 - **Minimal version is 5.5.0**.
@@ -140,7 +217,7 @@ New features:
 - Added `canAddFiles(): bool`
 - Added `canDeleteFiles(): bool`
 
-### 0.1.2 - Jan 03, 2019
+## 0.1.2 - Jan 03, 2019
 
 **BC-breaking changes**:
 - PclZip-interface getter renamed to `getPclZipInterface()`.
@@ -173,7 +250,7 @@ Format-specific changes:
 - **cab**:
     - Fixed `extractFiles()` functionality.
 
-### 0.1.1 - Sep 21, 2018
+## 0.1.1 - Sep 21, 2018
 API changes:
 * **Changed algorithm of files list generation in `archiveFiles()` and `addFiles()`**:
     ```php
@@ -216,7 +293,7 @@ Miscellaneous:
 * Added simple tests.
 * Added `phar` distribution.
 
-### 0.1.0 - Apr 11, 2018
+## 0.1.0 - Apr 11, 2018
 API changes:
 * Renamed methods `extractNode()` → `extractFiles()`, `archiveNodes()` → `archiveFiles()`. Original method are still available with `@deprecated` status.
 * `getFileData()` now returns `ArchiveEntry` instance instead of `stdClass`. Original object fields are still available with `@deprecated` status.
@@ -231,41 +308,41 @@ Miscellaneous:
 * Removed example scripts (`examples/`).
 * Code changes: added comments.
 
-### 0.0.11 - Mar 21, 2018
+## 0.0.11 - Mar 21, 2018
 * Cleaned up some old code.
 * Added `ext-phar` adapter for tar archives (if `pear/archive_tar` is not installed).
 
-### 0.0.10 - Aug 7, 2017
+## 0.0.10 - Aug 7, 2017
 * Remove `docopt` from requirements. Now it's a suggestion.
 
-### 0.0.9 - Jul 20, 2017
+## 0.0.9 - Jul 20, 2017
 * Added `cam` (Console Archive Manager) script.
 
-### 0.0.8 - Jan 24, 2017
+## 0.0.8 - Jan 24, 2017
 * Added initial support for `CAB` archives without extracting.
 * Added handling of short names of tar archives (.tgz/.tbz2/...).
 * Removed external repository declaration.
 * Removed `die()` in source code.
 
-### 0.0.7 - Jan 14, 2017
+## 0.0.7 - Jan 14, 2017
 * Fixed usage of `ereg` function for PHP >7.
 
-### 0.0.6 - Jan 9, 2017
+## 0.0.6 - Jan 9, 2017
 * Added functionality for adding files in archive.
 * Added functionality for deleting files from archive.
 * Fixed discovering `7z` archive number of files and creating new archive.
 
-### 0.0.5 - Jan 8, 2017
+## 0.0.5 - Jan 8, 2017
 * Added support for `7z` (by 7zip-cli) archives.
 
-### 0.0.4 - Jan 7, 2017
+## 0.0.4 - Jan 7, 2017
 * Added support for single-file `bz2` (bzip2) and `xz` (lzma2) archives.
 
-### 0.0.3 - Aug 18, 2015
+## 0.0.3 - Aug 18, 2015
 * Removed `archive_tar` from required packages.
 
-### 0.0.2 - May 27, 2014
+## 0.0.2 - May 27, 2014
 * Released under the MIT license
 
-### 0.0.1 - May 26, 2014
+## 0.0.1 - May 26, 2014
 First version.

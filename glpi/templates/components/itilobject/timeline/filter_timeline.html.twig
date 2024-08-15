@@ -5,7 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2022 Teclib' and contributors.
+ # @copyright 2015-2024 Teclib' and contributors.
  # @copyright 2003-2014 by the INDEPNET Development Team.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
@@ -40,31 +40,31 @@
    },
    'followups': {
       'title': _n('Followup', 'Followups', get_plural_number()),
-      'icon': 'ti ti-message-circle',
+      'icon': 'ITILFollowup'|itemtype_icon,
       'itemtype': 'ITILFollowup',
       'checked': true,
    },
    'tasks': {
       'title': _n('Task', 'Tasks', get_plural_number()),
-      'icon': 'ti ti-checkbox',
+      'icon': 'CommonITILTask'|itemtype_icon,
       'itemtype': 'ITILTask',
       'checked': true,
    },
    'documents': {
       'title': _n('Document', 'Documents', get_plural_number()),
-      'icon': 'ti ti-paperclip',
+      'icon': 'Document_Item'|itemtype_icon,
       'itemtype': 'Document_Item',
       'checked': true,
    },
    'validations': {
       'title': _n('Validation', 'Validations', get_plural_number()),
-      'icon': 'ti ti-thumb-up',
+      'icon': 'CommonITILValidation'|itemtype_icon,
       'itemtype': 'ITILValidation',
       'checked': true,
    },
    'solutions': {
       'title': _n('Solution', 'Solutions', get_plural_number()),
-      'icon': 'ti ti-check',
+      'icon': 'ITILSolution'|itemtype_icon,
       'itemtype': 'ITILSolution',
       'checked': true,
    },
@@ -81,10 +81,10 @@
    }) %}
 {% endif %}
 
-<div class="filter-timeline d-none d-md-block float-end mt-n2 position-relative">
+<div class="filter-timeline position-relative ms-auto">
    <span data-bs-toggle="tooltip" data-bs-placement="top" title="{{ __('Timeline filter') }}">
       <button type="button"
-            class="btn btn-sm btn-icon btn-ghost-secondary open-timeline-filter-popover"
+            class="btn btn-icon btn-ghost-secondary open-timeline-filter-popover"
             data-bs-toggle="collapse"
             data-bs-target="#filter-timeline-popover"
             data-bs-trigger="click">
@@ -117,7 +117,7 @@
    {% if get_current_interface() == 'central' %}
       <span data-bs-toggle="tooltip" data-bs-placement="top" title="{{ __('View TODO list') }}">
          <button type="button"
-               class="btn btn-sm btn-icon btn-ghost-secondary view-timeline-todo-list me-1">
+               class="btn btn-icon btn-ghost-secondary view-timeline-todo-list me-1">
             <i class="fas fa-tasks"></i>
          </button>
       </span>

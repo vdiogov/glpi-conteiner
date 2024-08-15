@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -41,9 +41,11 @@ use DBmysql;
 use GLPI;
 use Glpi\Application\ErrorHandler;
 use Glpi\Cache\CacheManager;
+use Glpi\Console\Command\ConfigurationCommandInterface;
 use Glpi\Console\Command\ForceNoPluginsOptionCommandInterface;
 use Glpi\Console\Command\GlpiCommandInterface;
 use Glpi\System\RequirementsManager;
+use Glpi\Toolbox\Filesystem;
 use Plugin;
 use Session;
 use Symfony\Component\Console\Application as BaseApplication;
@@ -67,6 +69,13 @@ class Application extends BaseApplication
      * @var integer
      */
     const ERROR_MISSING_REQUIREMENTS = 128; // start application codes at 128 be sure to be different from commands codes
+
+    /**
+     * Error code returned if write access to configuration files is denied.
+     *
+     * @var integer
+     */
+    const ERROR_CONFIG_WRITE_ACCESS_DENIED = 129;
 
     /**
      * Error code returned when DB is not up-to-date.
@@ -201,6 +210,7 @@ class Application extends BaseApplication
     protected function configureIO(InputInterface $input, OutputInterface $output)
     {
 
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $this->output = $output;
@@ -231,6 +241,17 @@ class Application extends BaseApplication
         return $this->output;
     }
 
+    protected function getCommandName(InputInterface $input)
+    {
+        $name = parent::getCommandName($input);
+        if ($name !== null) {
+            // strip `glpi:` prefix that was used before GLPI 10.0.6
+            // FIXME Deprecate usage of `glpi:` prefix in GLPI 10.1.
+            $name = preg_replace('/^glpi:/', '', $name);
+        }
+        return $name;
+    }
+
     protected function doRunCommand(Command $command, InputInterface $input, OutputInterface $output)
     {
 
@@ -239,7 +260,11 @@ class Application extends BaseApplication
         if ($command instanceof GlpiCommandInterface && $command->requiresUpToDateDb() && !Update::isDbUpToDate()) {
             $output->writeln(
                 '<error>'
-                . __('The version of the database is not compatible with the version of the installed files. An update is necessary.')
+                . __('The GLPI codebase has been updated. The update of the GLPI database is necessary.')
+                . '</error>'
+                . PHP_EOL
+                . '<error>'
+                . sprintf(__('Run the "%1$s" command to process to the update.'), 'php bin/console database:update')
                 . '</error>',
                 OutputInterface::VERBOSITY_QUIET
             );
@@ -251,6 +276,10 @@ class Application extends BaseApplication
             && !$this->checkCoreMandatoryRequirements()
         ) {
             return self::ERROR_MISSING_REQUIREMENTS;
+        }
+
+        if (!$this->checkConfigWriteAccess($command, $input)) {
+            return self::ERROR_CONFIG_WRITE_ACCESS_DENIED;
         }
 
         try {
@@ -290,6 +319,7 @@ class Application extends BaseApplication
     {
 
        // Disable debug at bootstrap (will be re-enabled later if requested by verbosity level).
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
         $CFG_GLPI = array_merge(
             $CFG_GLPI,
@@ -299,6 +329,7 @@ class Application extends BaseApplication
             ]
         );
 
+        /** @var \GLPI $GLPI */
         global $GLPI;
         $GLPI = new GLPI();
         $GLPI->initLogger();
@@ -321,6 +352,7 @@ class Application extends BaseApplication
             return;
         }
 
+        /** @var \DBmysql $DB */
         global $DB;
         $DB = @new DB();
         $this->db = $DB;
@@ -372,6 +404,7 @@ class Application extends BaseApplication
     private function initCache()
     {
 
+        /** @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE */
         global $GLPI_CACHE;
         $cache_manager = new CacheManager();
         $GLPI_CACHE = $cache_manager->getCoreCacheInstance();
@@ -387,6 +420,7 @@ class Application extends BaseApplication
     private function initConfig()
     {
 
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
         $this->config = &$CFG_GLPI;
 
@@ -492,10 +526,44 @@ class Application extends BaseApplication
 
         if ($core_requirements->hasMissingMandatoryRequirements()) {
             $message = __('Some mandatory system requirements are missing.')
-            . ' '
-            . __('Run "php bin/console glpi:system:check_requirements" for more details.');
+                . ' '
+                . sprintf(__('Run the "%1$s" command for more details.'), 'php bin/console system:check_requirements');
             $this->output->writeln(
                 '<error>' . $message . '</error>',
+                OutputInterface::VERBOSITY_QUIET
+            );
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Check potentially required write access to configuration files.
+     *
+     * @param Command $command
+     * @param InputInterface $input
+     *
+     * @return bool
+     */
+    private function checkConfigWriteAccess(Command $command, InputInterface $input): bool
+    {
+        if (!($command instanceof ConfigurationCommandInterface)) {
+            return true;
+        }
+
+        $config_files_to_update = array_map(
+            function ($path) {
+                return GLPI_CONFIG_DIR . DIRECTORY_SEPARATOR . $path;
+            },
+            $command->getConfigurationFilesToUpdate($input)
+        );
+        if (!Filesystem::canWriteFiles($config_files_to_update)) {
+            $this->output->writeln(
+                [
+                    '<error>' . sprintf(__('A temporary write access to the following files is required: %s.'), '`' . implode('`, `', $config_files_to_update) . '`') . '</error>',
+                    '<error>' . __('Write access to these files can be removed once the operation is finished.') . '</error>',
+                ],
                 OutputInterface::VERBOSITY_QUIET
             );
             return false;

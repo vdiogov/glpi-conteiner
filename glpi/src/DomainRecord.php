@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -254,7 +254,7 @@ class DomainRecord extends CommonDBChild
      * @param array   $input Input values
      * @param boolean $add   True when we're adding a record
      *
-     * @return aray|false
+     * @return array|false
      */
     private function prepareInput($input, $add = false)
     {
@@ -332,6 +332,7 @@ class DomainRecord extends CommonDBChild
 
     public function showForm($ID, array $options = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $rand = mt_rand();
@@ -502,6 +503,7 @@ JAVASCRIPT;
      **/
     public static function showForDomain(Domain $domain)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $instID = $domain->fields['id'];
@@ -539,25 +541,16 @@ JAVASCRIPT;
               __('Link a record') . "</th></tr>";
 
             echo "<tr class='tab_bg_1'><td class='center'>";
-            $used_iterator = $DB->request([
-                'SELECT' => 'id',
-                'FROM'   => self::getTable(),
-                'WHERE'  => [
-                    'domains_id'   => ['>', 0],
-                    'NOT'          => ['domains_id' => null]
-                ]
-            ]);
-
-            $used = [];
-            foreach ($used_iterator as $row) {
-                 $used[$row['id']] = $row['id'];
-            }
-
             Dropdown::show(
                 'DomainRecord',
                 [
                     'name'   => "domainrecords_id",
-                    'used'   => $used
+                    'condition' => [
+                        'NOT' => [
+                            'domains_id'   => ['>', 0],
+                            'NOT'          => ['domains_id' => null]
+                        ]
+                    ]
                 ]
             );
 

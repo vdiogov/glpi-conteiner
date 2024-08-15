@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -75,15 +75,16 @@ $timeline-badge-bg: rgba(97, 97, 97, 15%) !default;
 $timeline-badge-fg: rgba(43, 43, 43, 80%) !default;
 $input-border: $dark-mode-text !default;
 $dropdowns-list-contrast: rgba(167, 171, 175, 10%) !default;
-$entity-badge-bg: theme-color-lighter($link-color, true) !default;
-$entity-badge-fg: $link-color !default;
+$glpi-badge-bg: theme-color-lighter($link-color, true) !default;
+$glpi-badge-fg: $link-color !default;
 
 // helpers
 $topbar-height: 79px;
 $contextbar-height: 56px;
 $content-margin: 20px;
 
-body.iframed {
+body.iframed,
+body.in_modal {
     background-color: transparent;
     overflow-x: hidden;
 }
@@ -234,6 +235,10 @@ body.iframed {
 }
 
 table {
+    tbody:not(:has(tr)) {
+        display: none; // hide empty `tbody`
+    }
+
     td.active,
     td.tab_bg_4 {
         background-color: $table-active-bg;
@@ -247,13 +252,13 @@ table {
     }
 }
 
-.entity-badge {
+.glpi-badge {
     display: inline-flex;
     flex-wrap: wrap;
     justify-content: center;
     align-items: center;
-    background: $entity-badge-bg;
-    color: $entity-badge-fg !important;
+    background: $glpi-badge-bg;
+    color: $glpi-badge-fg !important;
     padding: calc(0.25rem - 1px) 0.25rem;
     border: 1px solid transparent;
     border-radius: 4px;
@@ -322,4 +327,17 @@ kbd {
 body,
 body input {
     font-variant-ligatures: no-contextual;
+}
+
+/** Bootstrap visibility classes (The utility class behavior is different in _styles.scss) */
+.bs-visible {
+    visibility: visible !important;
+}
+
+.bs-invisible {
+    visibility: hidden !important;
+}
+
+&:-webkit-autofill {
+   -webkit-text-fill-color: var(--tblr-body-color);
 }

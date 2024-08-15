@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -37,20 +37,22 @@ namespace Glpi\Console\Database;
 
 use Glpi\Cache\CacheManager;
 use Glpi\Console\AbstractCommand;
+use Glpi\Console\Command\ConfigurationCommandInterface;
 use Glpi\Console\Command\ForceNoPluginsOptionCommandInterface;
 use Glpi\Console\Traits\TelemetryActivationTrait;
 use Glpi\System\Diagnostic\DatabaseSchemaIntegrityChecker;
+use Glpi\Toolbox\DatabaseSchema;
 use Glpi\Toolbox\VersionParser;
+use GLPIKey;
 use Migration;
 use Session;
 use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Question\ConfirmationQuestion;
 use Update;
 
-class UpdateCommand extends AbstractCommand implements ForceNoPluginsOptionCommandInterface
+class UpdateCommand extends AbstractCommand implements ConfigurationCommandInterface, ForceNoPluginsOptionCommandInterface
 {
     use TelemetryActivationTrait;
 
@@ -88,7 +90,7 @@ class UpdateCommand extends AbstractCommand implements ForceNoPluginsOptionComma
     {
         parent::configure();
 
-        $this->setName('glpi:database:update');
+        $this->setName('database:update');
         $this->setAliases(['db:update']);
         $this->setDescription(__('Update database schema to new version'));
 
@@ -103,7 +105,7 @@ class UpdateCommand extends AbstractCommand implements ForceNoPluginsOptionComma
             '--skip-db-checks',
             's',
             InputOption::VALUE_NONE,
-            __('Do not check database schema integrity before performing the update')
+            __('Do not check database schema integrity before and after performing the update')
         );
 
         $this->addOption(
@@ -119,6 +121,7 @@ class UpdateCommand extends AbstractCommand implements ForceNoPluginsOptionComma
     protected function initialize(InputInterface $input, OutputInterface $output)
     {
 
+        /** @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE */
         global $GLPI_CACHE;
         $GLPI_CACHE = (new CacheManager())->getInstallerCacheInstance(); // Use dedicated "installer" cache
 
@@ -163,7 +166,11 @@ class UpdateCommand extends AbstractCommand implements ForceNoPluginsOptionComma
         $informations->addRow([__('Database name'), $this->db->dbdefault, '']);
         $informations->addRow([__('Database user'), $this->db->dbuser, '']);
         $informations->addRow([__('GLPI version'), $current_version, GLPI_VERSION]);
-        $informations->addRow([__('GLPI database version'), $current_db_version, GLPI_SCHEMA_VERSION]);
+        $informations->addRow([
+            __('GLPI database version'),
+            $this->getPrettyDbVersion($current_db_version),
+            $this->getPrettyDbVersion(GLPI_SCHEMA_VERSION),
+        ]);
         $informations->render();
 
         if (Update::isDbUpToDate() && !$force) {
@@ -201,16 +208,50 @@ class UpdateCommand extends AbstractCommand implements ForceNoPluginsOptionComma
 
         $this->askForConfirmation();
 
+        /** @var \Migration $migration */
         global $migration; // Migration scripts are using global `$migration`
         $migration = new Migration(GLPI_VERSION);
         $migration->setOutputHandler($output);
         $update->setMigration($migration);
         $update->doUpdates($current_version, $force);
-        $output->writeln('<info>' . __('Migration done.') . '</info>');
 
         (new CacheManager())->resetAllCaches(); // Ensure cache will not use obsolete data
 
+        $output->writeln('<info>' . __('Migration done.') . '</info>');
+
         $this->handTelemetryActivation($input, $output);
+
+        if ($this->input->getOption('skip-db-checks')) {
+            $this->output->writeln(
+                [
+                    '<comment>' . __('The database schema integrity check has been skipped.') . '</comment>',
+                    '<comment>' . sprintf(
+                        __('It is recommended to run the "%s" command to validate that the database schema is consistent with the current GLPI version.'),
+                        'php bin/console database:check_schema_integrity'
+                    ) . '</comment>'
+                ],
+                OutputInterface::VERBOSITY_QUIET
+            );
+        } elseif (!$update->isUpdatedSchemaConsistent()) {
+            // Exit with an error if database schema is not consistent.
+            // Keep this code at end of command to ensure that the whole migration is still executed.
+            // Many old GLPI instances will likely have differences, and people will have to fix them manually.
+            //
+            // Exiting with an exit code will permit to warn non-interactive automated scripts about the failure.
+            // Administrators will likely receive a failure notification and will be able to do manual actions in order to
+            // fix schema integrity.
+            $this->output->writeln(
+                [
+                    '<error>' . __('The database schema is not consistent with the current GLPI version.') . '</error>',
+                    '<error>' . sprintf(
+                        __('It is recommended to run the "%s" command to see the differences.'),
+                        'php bin/console database:check_schema_integrity'
+                    ) . '</error>'
+                ],
+                OutputInterface::VERBOSITY_QUIET
+            );
+            return self::ERROR_DATABASE_INTEGRITY_CHECK_FAILED;
+        }
 
         return 0; // Success
     }
@@ -236,34 +277,9 @@ class UpdateCommand extends AbstractCommand implements ForceNoPluginsOptionComma
 
         $this->output->writeln('<comment>' . __('Checking database schema integrity...') . '</comment>');
 
-        $current_version   = GLPI_SCHEMA_VERSION;
-        $install_version_nohash = preg_replace('/@.+$/', '', $installed_version);
-        $current_version_nohash = preg_replace('/@.+$/', '', $current_version);
+        $checker = new DatabaseSchemaIntegrityChecker($this->db, false, true, true, true, true, true);
 
-        if (
-            // source version is unstable version (e.g. upgrade from 10.0.3-dev)
-            !VersionParser::isStableRelease($install_version_nohash)
-            // or source and target versions are the same, but with a different schema hash
-            // (e.g. upgrade from 10.0.2@xxx to 10.0.2@yyy)
-            || (
-                $install_version_nohash === $current_version_nohash
-                && $installed_version !== $current_version
-            )
-        ) {
-            $msg = sprintf(
-                __('Database schema integrity check skipped as database was installed using an intermediate unstable version (%s).'),
-                $installed_version
-            );
-            $this->output->writeln('<comment>' . $msg . '</comment>', OutputInterface::VERBOSITY_QUIET);
-            return;
-        }
-
-        $schema_file = sprintf(
-            '%s/install/mysql/glpi-%s-empty.sql',
-            GLPI_ROOT,
-            VersionParser::getNormalizedVersion($install_version_nohash, false)
-        );
-        if (!file_exists($schema_file)) {
+        if (!$checker->canCheckIntegrity($installed_version)) {
             $msg = sprintf(
                 __('Database schema integrity check skipped as version "%s" is not supported by checking process.'),
                 $installed_version
@@ -272,17 +288,17 @@ class UpdateCommand extends AbstractCommand implements ForceNoPluginsOptionComma
             return;
         }
 
-        $checker = new DatabaseSchemaIntegrityChecker($this->db, false, true, true, true, true, true);
         $error = null;
         try {
-            $differences = $checker->checkCompleteSchema($schema_file, true);
+            $differences = $checker->checkCompleteSchemaForVersion($installed_version, true);
+            if (count($differences) > 0) {
+                $install_version_nohash = preg_replace('/@.+$/', '', $installed_version);
+                $error = sprintf(__('The database schema is not consistent with the installed GLPI version (%s).'), $install_version_nohash)
+                    . ' '
+                    . sprintf(__('Run the "%1$s" command to view found differences.'), 'php bin/console database:check_schema_integrity');
+            }
         } catch (\Throwable $e) {
             $error = sprintf(__('Database integrity check failed with error (%s).'), $e->getMessage());
-        }
-        if (count($differences) > 0) {
-            $error = sprintf(__('The database schema is not consistent with the installed GLPI version (%s).'), $install_version_nohash)
-                . ' '
-                . sprintf(__('Run the "php bin/console %1$s" command to view found differences.'), 'glpi:database:check_schema_integrity');
         }
 
         if ($error !== null) {
@@ -300,5 +316,49 @@ class UpdateCommand extends AbstractCommand implements ForceNoPluginsOptionComma
         } else {
             $this->output->writeln('<info>' . __('Database schema is OK.') . '</info>');
         }
+    }
+
+    /**
+     * Get DB version to display.
+     *
+     * @param string $raw_version
+     *
+     * @return string
+     */
+    private function getPrettyDbVersion(string $raw_version): string
+    {
+        $version_matches = [];
+        if (preg_match('/^(?<version>.+)@(?<hash>.+)$/', $raw_version, $version_matches) !== 1) {
+            // Version does not match expected pattern. It either contains no hash, either has an unexpected format.
+            // Preserve raw version string for debug purpose.
+            return $raw_version;
+        }
+
+        $version_cleaned = $version_matches['version'];
+        $version_hash    = $version_matches['hash'];
+
+        if (!VersionParser::isStableRelease($version_cleaned)) {
+            // Not a stable version. Keep hash for debug purpose.
+            return $raw_version;
+        }
+
+        $schema_path = DatabaseSchema::getEmptySchemaPath($version_cleaned);
+        if ($schema_path === null || $version_hash !== sha1_file($schema_path)) {
+            // Version hash does not match schema file sha1. Installation was probably made from a specific commit
+            // or a nightly build.
+            // Keep hash for debug purpose.
+            return $raw_version;
+        }
+
+        return $version_cleaned;
+    }
+
+    public function getConfigurationFilesToUpdate(InputInterface $input): array
+    {
+        if (!(new GLPIKey())->keyExists()) {
+            return ['glpicrypt.key'];
+        }
+
+        return [];
     }
 }

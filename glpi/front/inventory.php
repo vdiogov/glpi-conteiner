@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,19 +33,29 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Inventory\Conf;
 use Glpi\Inventory\Request;
+
+$SECURITY_STRATEGY = 'no_check'; // allow anonymous requests from inventory agent
 
 if (!defined('GLPI_ROOT')) {
     include(__DIR__ . '/../inc/includes.php');
 }
 
+$conf = new Conf();
+if ($conf->enabled_inventory != 1) {
+    die("Inventory is disabled");
+}
+
 $inventory_request = new Request();
 $inventory_request->handleHeaders();
 
+$refused = new RefusedEquipment();
+
 $handle = true;
+$contents = '';
 if (isset($_GET['refused'])) {
     Session::checkRight("config", READ);
-    $refused = new RefusedEquipment();
     if ($refused->getFromDB($_GET['refused']) && ($inventory_file = $refused->getInventoryFileName()) !== null) {
         $contents = file_get_contents($inventory_file);
     } else {
@@ -53,7 +63,6 @@ if (isset($_GET['refused'])) {
             sprintf('Invalid RefusedEquipment "%s" or inventory file missing', $_GET['refused']),
             E_USER_WARNING
         );
-        $contents = '';
     }
 } else if (!isCommandLine() && $_SERVER['REQUEST_METHOD'] != 'POST') {
     if (isset($_GET['action']) && $_GET['action'] == 'getConfig') {
@@ -84,10 +93,12 @@ if (isset($_GET['refused'])) {
 if ($handle === true) {
     try {
         $inventory_request->handleRequest($contents);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
         $inventory_request->addError($e->getMessage());
     }
 }
+
+$inventory_request->handleMessages();
 
 if (isset($_GET['refused'])) {
     $redirect_url = $refused->handleInventoryRequest($inventory_request);

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,8 +36,8 @@
 use Glpi\Toolbox\Sanitizer;
 
 /**
- * @var DB $DB
- * @var Migration $migration
+ * @var \DBmysql $DB
+ * @var \Migration $migration
  */
 
 /** User mention notification */
@@ -47,7 +47,7 @@ if (!$notification_exists) {
         'glpi_notifications',
         [
             'id'              => null,
-            'name'            => 'New user mentionned',
+            'name'            => 'New user mentioned',
             'entities_id'     => 0,
             'itemtype'        => 'Ticket',
             'event'           => 'user_mention',

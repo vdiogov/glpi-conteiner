@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -52,11 +52,28 @@ class DatabaseSchemaConsistencyChecker extends AbstractDatabaseChecker
         $missing_columns = [];
 
         $columns = $this->getColumnsNames($table_name);
+        $itemtype = getItemTypeForTable($table_name);
+
+        if (is_subclass_of($itemtype, \CommonTreeDropdown::class)) {
+            foreach (['level', 'ancestors_cache', 'sons_cache'] as $expected_col) {
+                if (!in_array($expected_col, $columns)) {
+                    $missing_columns[] = $expected_col;
+                }
+            }
+        }
         foreach ($columns as $column_name) {
             switch ($column_name) {
                 case 'date_creation':
                     if (!in_array('date_mod', $columns)) {
                         $missing_columns[] = 'date_mod';
+                    }
+                    break;
+                case 'is_dynamic':
+                    $exclude_table = ['glpi_useremails', 'glpi_profiles_users', 'glpi_groups_users'];
+                    if (!in_array($table_name, $exclude_table)) {
+                        if (!in_array('is_deleted', $columns)) {
+                            $missing_columns[] = 'is_deleted';
+                        }
                     }
                     break;
                 case 'date_mod':

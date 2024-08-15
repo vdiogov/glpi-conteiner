@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,13 +36,9 @@
 use Glpi\SocketModel;
 
 // Current version of GLPI
-define('GLPI_VERSION', '10.0.3');
+define('GLPI_VERSION', '10.0.16');
 
-$schema_file = sprintf(
-    '%s/install/mysql/glpi-%s-empty.sql',
-    GLPI_ROOT,
-    preg_replace('/^(\d+\.\d+\.\d+)(-.+)?$/', '$1', GLPI_VERSION) // strip stability suffix
-);
+$schema_file = sprintf('%s/install/mysql/glpi-empty.sql', GLPI_ROOT);
 define(
     "GLPI_SCHEMA_VERSION",
     GLPI_VERSION . (is_readable($schema_file) ? '@' . sha1_file($schema_file) : '')
@@ -53,8 +49,8 @@ if (!defined('GLPI_MARKETPLACE_PRERELEASES')) {
 }
 
 define('GLPI_MIN_PHP', '7.4.0'); // Must also be changed in top of index.php
-define('GLPI_MAX_PHP', '8.3.0'); // (Exclusive) Must also be changed in top of index.php
-define('GLPI_YEAR', '2022');
+define('GLPI_MAX_PHP', '8.4.0'); // (Exclusive) Must also be changed in top of index.php
+define('GLPI_YEAR', '2024');
 
 //Define a global recipient address for email notifications
 //define('GLPI_FORCE_MAIL', 'me@localhost');
@@ -167,6 +163,7 @@ define("MAIL_MAIL", 0);
 define("MAIL_SMTP", 1);
 define("MAIL_SMTPSSL", 2);
 define("MAIL_SMTPTLS", 3);
+define("MAIL_SMTPOAUTH", 4);
 
 // MESSAGE TYPE
 define("INFO", 0);
@@ -197,12 +194,12 @@ $CFG_GLPI["state_types"]                  = ['Computer', 'Monitor', 'NetworkEqui
     'Peripheral', 'Phone', 'Printer', 'SoftwareLicense',
     'Certificate', 'Enclosure', 'PDU', 'Line',
     'Rack', 'SoftwareVersion', 'Cluster', 'Contract',
-    'Appliance', 'DatabaseInstance', 'Cable'
+    'Appliance', 'DatabaseInstance', 'Cable', 'Unmanaged', 'PassiveDCEquipment'
 ];
 
 $CFG_GLPI["asset_types"]                  = ['Computer', 'Monitor', 'NetworkEquipment',
     'Peripheral', 'Phone', 'Printer', 'SoftwareLicense',
-    'Certificate'
+    'Certificate', 'Unmanaged', 'Appliance'
 ];
 
 $CFG_GLPI["project_asset_types"]          = ['Computer', 'Monitor', 'NetworkEquipment',
@@ -308,7 +305,7 @@ $CFG_GLPI["dictionnary_types"]            = ['ComputerModel', 'ComputerType', 'M
     'DatabaseInstanceType', SocketModel::class, 'CableType'
 ];
 
-$CFG_GLPI["helpdesk_visible_types"]       = ['Software', 'Appliance', 'Database'];
+$CFG_GLPI["helpdesk_visible_types"]       = ['Software', 'Appliance', 'DatabaseInstance'];
 
 $CFG_GLPI["networkport_types"]            = ['Computer', 'Monitor', 'NetworkEquipment', 'Peripheral',
     'Phone', 'Printer', 'Enclosure', 'PDU', 'Cluster', 'Unmanaged'
@@ -348,7 +345,7 @@ $CFG_GLPI["itemdevices_itemaffinity"]     = ['Computer'];
 
 $CFG_GLPI["itemdevicememory_types"]       = ['Computer', 'NetworkEquipment', 'Peripheral', 'Printer', 'Phone'];
 
-$CFG_GLPI["itemdevicepowersupply_types"]  = ['Computer', 'NetworkEquipment', 'Enclosure', 'Phone'];
+$CFG_GLPI["itemdevicepowersupply_types"]  = ['Computer', 'NetworkEquipment', 'Peripheral', 'Enclosure', 'Phone'];
 
 $CFG_GLPI["itemdevicenetworkcard_types"]  = ['Computer', 'NetworkEquipment', 'Peripheral', 'Phone', 'Printer'];
 
@@ -466,11 +463,11 @@ $CFG_GLPI['user_pref_field'] = ['backcreated', 'csv_delimiter', 'date_format',
     'priority_6', 'refresh_views', 'set_default_tech',
     'set_default_requester', 'show_count_on_tabs',
     'show_jobs_at_login', 'task_private', 'task_state',
-    'use_flat_dropdowntree', 'palette', 'page_layout',
+    'use_flat_dropdowntree', 'use_flat_dropdowntree_on_search_result', 'palette', 'page_layout',
     'highcontrast_css', 'default_dashboard_central', 'default_dashboard_assets',
     'default_dashboard_helpdesk', 'default_dashboard_mini_ticket', 'default_central_tab',
     'fold_menu', 'fold_search', 'savedsearches_pinned', 'richtext_layout', 'timeline_order',
-    'itil_layout'
+    'itil_layout', 'timeline_action_btn_layout', 'timeline_date_format'
 ];
 
 $CFG_GLPI['lock_lockable_objects'] = ['Budget',  'Change', 'Contact', 'Contract', 'Document',
@@ -490,8 +487,12 @@ $CFG_GLPI['inventory_types'] = [
 ];
 
 $CFG_GLPI['inventory_lockable_objects'] = ['Computer_Item',  'Item_SoftwareLicense',
-    'Item_SoftwareVersion', 'Item_Disk', 'ComputerVirtualMachine',
-    'NetworkPort', 'NetworkName', 'IPAddress'
+    'Item_SoftwareVersion', 'Item_Disk', 'ComputerVirtualMachine','ComputerAntivirus',
+    'NetworkPort', 'NetworkName', 'IPAddress', 'Item_OperatingSystem', 'Item_DeviceBattery', 'Item_DeviceCase',
+    'Item_DeviceControl', 'Item_DeviceDrive', 'Item_DeviceFirmware', 'Item_DeviceGeneric', 'Item_DeviceGraphicCard',
+    'Item_DeviceHardDrive', 'Item_DeviceMemory', 'Item_DeviceMotherboard', 'Item_DeviceNetworkCard', 'Item_DevicePci',
+    'Item_DevicePowerSupply', 'Item_DeviceProcessor', 'Item_DeviceSensor', 'Item_DeviceSimcard', 'Item_DeviceSoundCard',
+    'DatabaseInstance', 'Item_RemoteManagement','Monitor', 'Domain_Item'
 ];
 
 $CFG_GLPI["kb_types"]              = ['Budget', 'Change', 'Computer',
@@ -518,10 +519,12 @@ $CFG_GLPI['operatingsystem_types'] = ['Computer', 'Monitor', 'NetworkEquipment',
 
 $CFG_GLPI['software_types']      = $CFG_GLPI['operatingsystem_types'];
 
+$CFG_GLPI['disk_types'] = ['Computer', 'NetworkEquipment', 'Phone', 'Printer'];
+
 $CFG_GLPI['kanban_types']        = ['Project'];
 
 $CFG_GLPI['domain_types']        = ['Computer', 'Monitor', 'NetworkEquipment', 'Peripheral',
-    'Phone', 'Printer', 'Software', 'Appliance', 'Certificate', 'DatabaseInstance', 'Database'
+    'Phone', 'Printer', 'Software', 'Appliance', 'Certificate', 'DatabaseInstance', 'Database', 'Unmanaged'
 ];
 
 $CFG_GLPI['appliance_types']     = ['Computer', 'Monitor', 'NetworkEquipment', 'Peripheral', 'Phone',
@@ -536,37 +539,33 @@ $CFG_GLPI['databaseinstance_types'] = ['Computer'];
 
 $CFG_GLPI['agent_types'] = ['Computer', 'Phone'];
 
-$dashboard_libs = [
-    'dashboard', 'gridstack',
-    'charts', 'clipboard', 'sortable'
-];
-
 $reservations_libs = ['fullcalendar', 'reservations'];
 
 $CFG_GLPI['javascript'] = [
     'central'   => [
-        'central' => array_merge([
+        'central' => [
             'fullcalendar',
             'planning',
             'masonry',
             'tinymce',
-        ], $dashboard_libs)
+            'dashboard',
+        ]
     ],
     'assets'    => [
-        'dashboard'   => $dashboard_libs,
+        'dashboard'   => ['dashboard'],
         'rack'        => ['gridstack', 'rack'],
-        'printer'     => $dashboard_libs,
+        'printer'     => ['dashboard'],
         'cable'       => ['cable'],
         'socket'      => ['cable'],
-        'networkport' => $dashboard_libs,
+        'networkport' => ['dashboard'],
     ],
     'helpdesk'  => [
-        'dashboard' => $dashboard_libs,
+        'dashboard' => ['dashboard'],
         'planning'  => ['clipboard', 'fullcalendar', 'tinymce', 'planning'],
-        'ticket'    => array_merge(['rateit', 'tinymce', 'kanban'], $dashboard_libs),
+        'ticket'    => ['rateit', 'tinymce', 'kanban', 'dashboard'],
         'problem'   => ['tinymce', 'kanban', 'sortable'],
         'change'    => ['tinymce', 'kanban', 'sortable'],
-        'stat'      => ['charts']
+        'stat'      => ['charts', 'rateit']
     ],
     'tools'     => [
         'project'                 => ['kanban', 'tinymce', 'sortable'],
@@ -594,7 +593,7 @@ $CFG_GLPI['javascript'] = [
         'plugin' => [
             'marketplace' => ['marketplace']
         ],
-        'config' => ['clipboard']
+        'config' => ['clipboard', 'tinymce']
     ],
     'admin'        => ['clipboard', 'sortable'],
     'preference'   => ['clipboard'],

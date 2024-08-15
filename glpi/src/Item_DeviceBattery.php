@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -66,6 +66,14 @@ class Item_DeviceBattery extends Item_Devices
                 'datatype'   => 'progressbar',
                 'max'       => 'capacity',    // Field used to represent 100% capacity value
             ]
+        ];
+    }
+
+    public function getImportCriteria(): array
+    {
+        return [
+            'serial' => 'equal',
+            //'real_capacity' => 'delta:10'
         ];
     }
 }

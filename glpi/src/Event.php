@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -51,18 +51,16 @@ use Toolbox;
  **/
 class Event extends CommonDBTM
 {
-    public static $rightname = 'logs';
-
-
+    public static $rightname = 'system_logs';
 
     public static function getTypeName($nb = 0)
     {
         return _n('Log', 'Logs', $nb);
     }
 
-
     public function prepareInputForAdd($input)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (isset($input['level']) && ($input['level'] <= $CFG_GLPI["event_loglevel"])) {
@@ -89,7 +87,6 @@ class Event extends CommonDBTM
         }
     }
 
-
     /**
      * Log an event.
      *
@@ -104,6 +101,7 @@ class Event extends CommonDBTM
      **/
     public static function log($items_id, $type, $level, $service, $event)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $input = ['items_id' => intval($items_id),
@@ -117,7 +115,6 @@ class Event extends CommonDBTM
         return $tmp->add($input);
     }
 
-
     /**
      * Clean old event - Call by cron
      *
@@ -127,6 +124,7 @@ class Event extends CommonDBTM
      **/
     public static function cleanOld($day)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $secs = $day * DAY_TIMESTAMP;
@@ -139,7 +137,6 @@ class Event extends CommonDBTM
         );
         return $DB->affectedRows();
     }
-
 
     /**
      * Return arrays for function showEvent et lastEvent
@@ -181,13 +178,13 @@ class Event extends CommonDBTM
         return [$logItemtype, $logService];
     }
 
-
     /**
      * @param $type
      * @param $items_id
      **/
     public static function displayItemLogID($type, $items_id)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         // If ID less than or equal to 0 (or Entity with ID less than 0 since Root Entity is 0)
@@ -235,7 +232,6 @@ class Event extends CommonDBTM
         }
     }
 
-
     /**
      * Print a nice tab for last event from inventory section
      *
@@ -246,7 +242,11 @@ class Event extends CommonDBTM
      **/
     public static function showForUser(string $user = "", bool $display = true)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
        // Show events from $result in table form
         list($logItemtype, $logService) = self::logArray();
@@ -356,7 +356,6 @@ class Event extends CommonDBTM
         }
     }
 
-
     /**
      * Print a nice tab for last event
      *
@@ -400,7 +399,27 @@ class Event extends CommonDBTM
             'LIMIT'  => (int)$_SESSION['glpilist_limit']
         ]);
 
-       // Number of results
+        $events = [];
+        foreach ($iterator as $data) {
+            $itemtype_name = null;
+            $itemtype_icon = CommonDBTM::getIcon();
+            if (isset($logItemtype[$data['type']])) {
+                $itemtype_name = $logItemtype[$data['type']];
+            } else {
+                // Converts lowercase plural string into corresponding classname
+                $item = getItemForItemtype(getSingular($data['type']));
+                if ($item !== false) {
+                    $itemtype_name = $item->getTypeName();
+                    $itemtype_icon = $item->getIcon();
+                }
+            }
+            $data['itemtype_name'] = $itemtype_name;
+            $data['itemtype_icon'] = $itemtype_icon;
+
+            $events[] = $data;
+        }
+
+        // Number of results
         $numrows = countElementsInTable("glpi_events");
 
         TemplateRenderer::getInstance()->display('pages/admin/events_list.html.twig', [
@@ -409,15 +428,19 @@ class Event extends CommonDBTM
             'sort'      => $sort,
             'start'     => $start,
             'target'    => $target,
-            'events'    => $iterator,
+            'events'    => $events,
             'itemtypes' => $logItemtype,
             'services'  => $logService,
         ]);
     }
 
-
     public static function getIcon()
     {
         return "ti ti-news";
+    }
+
+    public function getRights($interface = 'central'): array
+    {
+        return [ READ => __('Read')];
     }
 }

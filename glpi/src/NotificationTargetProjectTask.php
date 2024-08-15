@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -60,8 +60,8 @@ class NotificationTargetProjectTask extends NotificationTarget
     public function addAdditionalTargets($event = '')
     {
 
-        $this->addTarget(Notification::TEAM_USER, __('Project team user'));
-        $this->addTarget(Notification::TEAM_GROUP, __('Project team group'));
+        $this->addTarget(Notification::TEAM_USER, __('Project task team user'));
+        $this->addTarget(Notification::TEAM_GROUP, __('Project task team group'));
         $this->addTarget(Notification::TEAM_GROUP_SUPERVISOR, __('Manager of group of project team'));
         $this->addTarget(
             Notification::TEAM_GROUP_WITHOUT_SUPERVISOR,
@@ -120,6 +120,7 @@ class NotificationTargetProjectTask extends NotificationTarget
      **/
     public function addTeamUsers()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -151,6 +152,7 @@ class NotificationTargetProjectTask extends NotificationTarget
      **/
     public function addTeamGroups($manager)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -175,7 +177,11 @@ class NotificationTargetProjectTask extends NotificationTarget
      **/
     public function addTeamContacts()
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $iterator = $DB->request([
             'SELECT' => 'items_id',
@@ -206,7 +212,11 @@ class NotificationTargetProjectTask extends NotificationTarget
      **/
     public function addTeamSuppliers()
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $iterator = $DB->request([
             'SELECT' => 'items_id',
@@ -232,6 +242,10 @@ class NotificationTargetProjectTask extends NotificationTarget
 
     public function addDataForTemplate($event, $options = [])
     {
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
         global $CFG_GLPI, $DB;
 
        //----------- Reservation infos -------------- //
@@ -360,7 +374,7 @@ class NotificationTargetProjectTask extends NotificationTarget
         $this->data['tasks'] = [];
         foreach ($tasks as $task) {
             $tmp                            = [];
-            $tmp['##task.creationdate##']   = Html::convDateTime($task['date']);
+            $tmp['##task.creationdate##']   = Html::convDateTime($task['date_creation']);
             $tmp['##task.lastupdatedate##'] = Html::convDateTime($task['date_mod']);
             $tmp['##task.name##']           = $task['name'];
             $tmp['##task.description##']    = $task['content'];

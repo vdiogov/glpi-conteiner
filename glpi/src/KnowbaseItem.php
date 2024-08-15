@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -126,6 +126,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
 
     public static function canView()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         return (Session::haveRightsOr(self::$rightname, [READ, self::READFAQ])
@@ -182,6 +183,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      **/
     public static function getSearchURL($full = true)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $dir = ($full ? $CFG_GLPI['root_doc'] : '');
@@ -199,6 +201,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      **/
     public static function getFormURL($full = true)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $dir = ($full ? $CFG_GLPI['root_doc'] : '');
@@ -462,6 +465,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      **/
     public function isPubliclyVisible()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!$CFG_GLPI['use_public_faq']) {
@@ -506,6 +510,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
     {
        //not deprecated because used in self::getListRequest and self::showRecentPopular
 
+        /** @var \DBmysql $DB */
         global $DB;
 
        //get and clean criteria
@@ -535,6 +540,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
     {
        //not deprecated because used in self::getListRequest and self::showRecentPopular
 
+        /** @var \DBmysql $DB */
         global $DB;
 
        //get and clean criteria
@@ -570,24 +576,70 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      */
     public static function getVisibilityCriteria(bool $forceall = false): array
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
-        $is_public_faq_context = !Session::getLoginUserID() && $CFG_GLPI["use_public_faq"];
-        $has_session_groups = isset($_SESSION["glpigroups"]) && count($_SESSION["glpigroups"]);
-        $has_active_profile = isset($_SESSION["glpiactiveprofile"])
-         && isset($_SESSION["glpiactiveprofile"]['id']);
-        $has_active_entity = isset($_SESSION["glpiactiveentities"])
-         && count($_SESSION["glpiactiveentities"]);
+        // Build common JOIN clause
+        $criteria = [
+            'LEFT JOIN' => self::getVisibilityCriteriaCommonJoin($forceall),
+        ];
 
-        $where = [];
-        $join = [
-            'glpi_knowbaseitems_users' => [
+        // Handle anonymous users
+        if (!Session::getLoginUserID()) {
+            if ($CFG_GLPI["use_public_faq"]) {
+                // Public FAQ is enabled; show FAQ
+                $criteria['WHERE'] = self::getVisibilityCriteriaFAQ();
+                return $criteria;
+            } else {
+                // Public FAQ is disabled; show nothing
+                $criteria['WHERE'] = [0];
+                return $criteria;
+            }
+        }
+
+        // Handle logged in users
+        if (Session::getCurrentInterface() == "helpdesk") {
+            // Show FAQ for helpdesk user
+            $criteria['WHERE'] = self::getVisibilityCriteriaFAQ();
+            return $criteria;
+        } else {
+            // Show knowledge base for central users
+            $criteria['WHERE'] = self::getVisibilityCriteriaKB();
+            return $criteria;
+        }
+    }
+
+    /**
+     * Common JOIN clause used by getVisibilityCriteria* methods
+     *
+     * @param bool $forceall Force all join ?
+     *
+     * @return array LEFT JOIN clause
+     */
+    private static function getVisibilityCriteriaCommonJoin(bool $forceall = false)
+    {
+        /** @var array $CFG_GLPI */
+        global $CFG_GLPI;
+
+        $join = [];
+
+        // Context checks - avoid doing unnecessary join if possible
+        $is_public_faq_context = !Session::getLoginUserID() && $CFG_GLPI["use_public_faq"];
+        $has_session_groups = count(($_SESSION["glpigroups"] ?? []));
+        $has_active_profile = isset($_SESSION["glpiactiveprofile"]['id']);
+        $has_active_entity = count(($_SESSION["glpiactiveentities"] ?? []));
+
+        // Add user restriction data
+        if ($forceall || Session::getLoginUserID()) {
+            $join['glpi_knowbaseitems_users'] = [
                 'ON' => [
                     'glpi_knowbaseitems_users' => 'knowbaseitems_id',
                     'glpi_knowbaseitems'       => 'id'
                 ]
-            ]
-        ];
+            ];
+        }
+
+        // Add group restriction data
         if ($forceall || $has_session_groups) {
             $join['glpi_groups_knowbaseitems'] = [
                 'ON' => [
@@ -596,6 +648,8 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
                 ]
             ];
         }
+
+        // Add profile restriction data
         if ($forceall || $has_active_profile) {
             $join['glpi_knowbaseitems_profiles'] = [
                 'ON' => [
@@ -604,6 +658,8 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
                 ]
             ];
         }
+
+        // Add entity restriction data
         if ($forceall || $has_active_entity || $is_public_faq_context) {
             $join['glpi_entities_knowbaseitems'] = [
                 'ON' => [
@@ -613,81 +669,161 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
             ];
         }
 
-        if (Session::haveRight(self::$rightname, self::KNOWBASEADMIN)) {
-            return [
-                'LEFT JOIN' => $join,
-                'WHERE' => [],
-            ];
-        }
+        return $join;
+    }
 
-       // Users
-        if (Session::getLoginUserID()) {
-            $where['OR'] = [
-                'glpi_knowbaseitems.users_id'       => Session::getLoginUserID(),
-                'glpi_knowbaseitems_users.users_id' => Session::getLoginUserID(),
-                'glpi_knowbaseitems.is_faq'         => 1,
-            ];
-        } else if ($is_public_faq_context) {
-            $where = [
-                "glpi_knowbaseitems.is_faq" => 1,
-            ];
+    /**
+     * Get visibility criteria for articles displayed in the FAQ (seen by
+     * helpdesk and anonymous users)
+     * This mean any KB article tagged as 'is_faq' should be displayed
+     *
+     * @return array WHERE clause
+     */
+    private static function getVisibilityCriteriaFAQ(): array
+    {
+        // Specific case for anonymous users + multi entities
+        if (!Session::getLoginUserID()) {
+            $where = ['is_faq' => 1];
             if (Session::isMultiEntitiesMode()) {
-                $where += [
-                    "glpi_entities_knowbaseitems.entities_id" => 0,
-                    "glpi_entities_knowbaseitems.is_recursive" => 1,
-                ];
+                $where[Entity_KnowbaseItem::getTableField('entities_id')] = 0;
+                $where[Entity_KnowbaseItem::getTableField('is_recursive')] = 1;
             }
         } else {
-            $where = [
-                0
+            $where = self::getVisibilityCriteriaKB();
+            $where['is_faq'] = 1;
+        }
+
+        return $where;
+    }
+
+    /**
+     * Get visibility criteria for articles displayed in the knowledge base
+     * (seen by central users)
+     * This mean any KB article with valid visibility criteria for the current
+     * user should be displayed
+     *
+     * @return array WHERE clause
+     */
+    private static function getVisibilityCriteriaKB(): array
+    {
+        // Special case for KB Admins
+        if (Session::haveRight(self::$rightname, self::KNOWBASEADMIN)) {
+            // See all articles
+            return [1];
+        }
+
+        // Prepare criteria, which will use an OR statement (the user can read
+        // the article if any of the user/group/profile/entity criteria are
+        // validated)
+        $where = ['OR' => []];
+
+        // Special case: the user may be the article's author
+        $user = Session::getLoginUserID();
+        $author_check = [self::getTableField('users_id') => $user];
+        $where['OR'][] = $author_check;
+
+        // Filter on users
+        $where['OR'][] = self::getVisibilityCriteriaKB_User();
+
+        // Filter on groups (if the current user have any)
+        $groups = $_SESSION["glpigroups"] ?? [];
+        if (count($groups)) {
+            $where['OR'][] = self::getVisibilityCriteriaKB_Group();
+        }
+
+        // Filter on profiles
+        $where['OR'][] = self::getVisibilityCriteriaKB_Profile();
+
+        // Filter on entities
+        $where['OR'][] = self::getVisibilityCriteriaKB_Entity();
+
+        return $where;
+    }
+
+    /**
+     * Get criteria used to filter knowledge base articles on users
+     *
+     * @return array
+     */
+    private static function getVisibilityCriteriaKB_User(): array
+    {
+        $user = Session::getLoginUserID();
+        return [
+            KnowbaseItem_User::getTableField('users_id') => $user,
+        ];
+    }
+
+    /**
+     * Get criteria used to filter knowledge base articles on groups
+     *
+     * @return array
+     */
+    private static function getVisibilityCriteriaKB_Group(): array
+    {
+        $groups = $_SESSION["glpigroups"] ?? [-1];
+        $entity_restriction = getEntitiesRestrictCriteria(
+            Group_KnowbaseItem::getTable(),
+            '',
+            '',
+            true,
+            true
+        );
+
+        return [
+            Group_KnowbaseItem::getTableField('groups_id') => $groups,
+            'OR' => [
+                Group_KnowbaseItem::getTableField('no_entity_restriction') => 1,
+            ] + $entity_restriction,
+        ];
+    }
+
+    /**
+     * Get criteria used to filter knowledge base articles on profiles
+     *
+     * @return array
+     */
+    private static function getVisibilityCriteriaKB_Profile(): array
+    {
+        $profile = $_SESSION["glpiactiveprofile"]['id'] ?? -1;
+        $entity_restriction = getEntitiesRestrictCriteria(
+            KnowbaseItem_Profile::getTable(),
+            '',
+            '',
+            true,
+            true
+        );
+
+        return [
+            KnowbaseItem_Profile::getTableField('profiles_id') => $profile,
+            'OR' => [
+                KnowbaseItem_Profile::getTableField('no_entity_restriction') => 1,
+            ] + $entity_restriction,
+        ];
+    }
+
+    /**
+     * Get criteria used to filter knowledge base articles on entity
+     *
+     * @return array
+     */
+    private static function getVisibilityCriteriaKB_Entity(): array
+    {
+        $entity_restriction = getEntitiesRestrictCriteria(
+            Entity_KnowbaseItem::getTable(),
+            '',
+            '',
+            true,
+            true
+        );
+
+        // All entities
+        if (!count($entity_restriction)) {
+            $entity_restriction = [
+                Entity_KnowbaseItem::getTableField('entities_id') => null
             ];
         }
-       // Groups
-        if ($forceall || $has_session_groups) {
-            if (Session::getLoginUserID()) {
-                $restrict = getEntitiesRestrictCriteria('glpi_groups_knowbaseitems', '', '', true, true);
-                $where['OR'][] = [
-                    'glpi_groups_knowbaseitems.groups_id' => count($_SESSION["glpigroups"])
-                                                         ? $_SESSION["glpigroups"]
-                                                         : [-1],
-                    'OR' => [
-                        'glpi_groups_knowbaseitems.no_entity_restriction' => 1,
-                    ] + $restrict
-                ];
-            }
-        }
 
-       // Profiles
-        if ($forceall || $has_active_profile) {
-            if (Session::getLoginUserID()) {
-                $where['OR'][] = [
-                    'glpi_knowbaseitems_profiles.profiles_id' => $_SESSION["glpiactiveprofile"]['id'],
-                    'OR' => [
-                        'glpi_knowbaseitems_profiles.no_entity_restriction' => 1,
-                        getEntitiesRestrictCriteria('glpi_knowbaseitems_profiles', '', '', true, true)
-                    ]
-                ];
-            }
-        }
-
-       // Entities
-        if ($forceall || $has_active_entity) {
-            if (Session::getLoginUserID()) {
-                $restrict = getEntitiesRestrictCriteria('glpi_entities_knowbaseitems', '', '', true, true);
-                if (count($restrict)) {
-                    $where['OR'] = $where['OR'] + $restrict;
-                } else {
-                    $where['glpi_entities_knowbaseitems.entities_id'] = null;
-                }
-            }
-        }
-
-        $criteria = ['LEFT JOIN' => $join];
-        if (count($where)) {
-            $criteria['WHERE'] = $where;
-        }
-
-        return $criteria;
+        return $entity_restriction;
     }
 
     public function prepareInputForAdd($input)
@@ -723,7 +859,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
         return $input;
     }
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
         // Handle rich-text images and uploaded documents
         $this->input = $this->addFiles(
@@ -758,6 +894,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      **/
     public function showForm($ID, array $options = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        // show kb item form
@@ -979,6 +1116,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      **/
     public function addToFaq()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $DB->update(
@@ -999,6 +1137,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      */
     public function updateCounter()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        //update counter view
@@ -1019,12 +1158,14 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      *
      * @param $options      array of options
      *
-     * @return void|string
-     *    void if option display=true
-     *    string if option display=false (HTML code)
+     * @return boolean|string
      **/
     public function showFull($options = [])
     {
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
         global $CFG_GLPI, $DB;
 
         if (!$this->can($this->fields['id'], READ)) {
@@ -1195,6 +1336,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      **/
     public function searchForm($options)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (
@@ -1241,6 +1383,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      **/
     public function showBrowseForm($options)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (
@@ -1344,15 +1487,12 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      **/
     public static function getListRequest(array $params, $type = 'search')
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $criteria = [
             'SELECT' => [
                 'glpi_knowbaseitems.*',
-                'glpi_knowbaseitems_knowbaseitemcategories.knowbaseitemcategories_id',
-                new QueryExpression(
-                    'GROUP_CONCAT(DISTINCT ' . $DB->quoteName('glpi_knowbaseitemcategories.completename') . ') AS category'
-                ),
                 new QueryExpression(
                     'COUNT(' . $DB->quoteName('glpi_knowbaseitems_users.id') . ')' .
                     ' + COUNT(' . $DB->quoteName('glpi_groups_knowbaseitems.id') . ')' .
@@ -1406,14 +1546,18 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
             ];
         }
 
-        if ($params['knowbaseitemcategories_id'] > 0) {
+        if ($params['knowbaseitemcategories_id'] !== KnowbaseItemCategory::SEEALL) {
             $criteria['LEFT JOIN'][KnowbaseItem_KnowbaseItemCategory::getTable()] = [
                 'FKEY' => [
                     KnowbaseItem_KnowbaseItemCategory::getTable() => KnowbaseItem::getForeignKeyField(),
                     KnowbaseItem::getTable() => 'id',
                 ],
             ];
-            $criteria['WHERE'][KnowbaseItem_KnowbaseItemCategory::getTableField('knowbaseitemcategories_id')] = $params['knowbaseitemcategories_id'];
+            if ($params['knowbaseitemcategories_id'] > 0) {
+                $criteria['WHERE'][KnowbaseItem_KnowbaseItemCategory::getTableField('knowbaseitemcategories_id')] = $params['knowbaseitemcategories_id'];
+            } elseif ($params['knowbaseitemcategories_id'] === 0) {
+                $criteria['WHERE'][KnowbaseItem_KnowbaseItemCategory::getTableField('knowbaseitemcategories_id')] = null;
+            }
         }
 
         if (
@@ -1456,21 +1600,14 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
                 $criteria['WHERE']['glpi_knowbaseitems_users.users_id'] = null;
                 break;
 
+            case 'allpublished':
+                $criteria['HAVING']['visibility_count'] = ['>', 0];
+                break;
+
             case 'search':
                 if (strlen($params["contains"]) > 0) {
                     $search  = Sanitizer::unsanitize($params["contains"]);
-
-                   // Replace all non word characters with spaces (see: https://stackoverflow.com/a/26537463)
-                    $search_wilcard = preg_replace('/[^\p{L}\p{N}_]+/u', ' ', $search);
-
-                   // Remove last space to avoid illegal syntax with " *"
-                    $search_wilcard = trim($search_wilcard);
-
-                   // Merge spaces since we are using them to split the string later
-                    $search_wilcard = preg_replace('!\s+!', ' ', $search_wilcard);
-
-                    $search_wilcard = explode(' ', $search_wilcard);
-                    $search_wilcard = implode('* ', $search_wilcard) . '*';
+                    $search_wilcard = self::computeBooleanFullTextSearch($search);
 
                     $addscore = [];
                     if (
@@ -1600,21 +1737,78 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
                 break;
         }
 
-        $criteria['LEFT JOIN']['glpi_knowbaseitems_knowbaseitemcategories'] = [
-            'ON'  => [
-                'glpi_knowbaseitems_knowbaseitemcategories'  => 'knowbaseitems_id',
-                'glpi_knowbaseitems'             => 'id'
-            ]
-        ];
-
-        $criteria['LEFT JOIN']['glpi_knowbaseitemcategories'] = [
-            'ON'  => [
-                'glpi_knowbaseitemcategories'    => 'id',
-                'glpi_knowbaseitems_knowbaseitemcategories'  => 'knowbaseitemcategories_id'
-            ]
-        ];
-
         return $criteria;
+    }
+
+    /**
+     * Clean search for Boolean FullText
+     *
+     * @since 10.0.7
+     * @param string $search
+     *
+     * @return string
+     **/
+    private static function computeBooleanFullTextSearch(string $search): string
+    {
+        $word_chars        = '\p{L}\p{N}_';
+        $ponderation_chars = '+\-<>~';
+
+        // Remove any whitespace from begin/end
+        $search = preg_replace('/^[\p{Z}\h\v\r\n]+|[\p{Z}\h\v\r\n]+$/u', '', $search);
+
+        // Remove all symbols except word chars, ponderation chars, parenthesis, quotes, wildcards and spaces.
+        // @distance is not included, since it's unlikely a human will be using it through UI form
+        $search = preg_replace("/[^{$word_chars}{$ponderation_chars}()\"* ]/u", '', $search);
+
+        // Remove all ponderation chars, that can only precede a word and that are not preceded by either beginning of string, a space or an opening parenthesis
+        $search = preg_replace("/(?<!^| |\()[{$ponderation_chars}]/u", '', $search);
+        // Remove all ponderation chars that are not followed by a search term
+        // (they are followed by a space, a closing parenthesis or end fo string)
+        $search = preg_replace("/[{$ponderation_chars}]+( |\)|$)/u", '', $search);
+
+        // Remove all opening parenthesis that are located inside a searched term
+        // (they are preceded by a word char or a quote)
+        $search = preg_replace("/(?<=[{$word_chars}\"])\(/u", '', $search);
+        // Remove all closing parenthesis that are located inside a searched term
+        // (they are followed by a word char or a quote)
+        $search = preg_replace("/\)(?=[{$word_chars}\")])/u", '', $search);
+        // Remove empty parenthesis
+        $search = preg_replace("/\(\)/u", '', $search);
+        // Remove all parenthesis if count of closing does not match count of opening ones
+        if (mb_substr_count($search, '(') !== mb_substr_count($search, ')')) {
+            $search = preg_replace("/[()]/u", '', $search);
+        }
+
+        // Remove all asterisks that are not located at the end of a word
+        // (can be followed by a space, a closing parenthesis or end of string, and must be preceded by a word char)
+        $search = preg_replace("/(?<=[{$word_chars}])\*(?! |\)|$)/u", '', $search);
+
+        // Remove all double quotes
+        // - that are not located before a searched term
+        //   (can be preceded by beginning of string, an operator, a space or an opening parenthesis, and must be followed by a word char)
+        $search = preg_replace("/(?<=^|[{$ponderation_chars} (])\"(?![{$word_chars}])/u", '', $search);
+        // - that are not located after a searched term
+        //   (can be followed by a space, a closing parenthesis or end of string, and must be preceded by a word char)
+        $search = preg_replace("/(?<=[{$word_chars}])\"(?! |\)|$)/u", '', $search);
+        // - if the count is not even
+        if (mb_substr_count($search, '"') % 2 !== 0) {
+            $search = preg_replace("/\"/u", '', $search);
+        }
+
+        // Check if the new value is just the set of operators and spaces and if it is - set the value to an empty string
+        if (preg_match("/^[{$ponderation_chars}()\"* ]+$/u", $search)) {
+            $search = '';
+        }
+
+        // Remove extra spaces
+        $search = preg_replace('/\s+/u', ' ', trim($search));
+
+        // Add * foreach word when no boolean operator is used
+        if (!preg_match('/[^\p{L}\p{N}_ ]/u', $search)) {
+            $search = implode('* ', explode(' ', $search)) . '*';
+        }
+
+        return $search;
     }
 
 
@@ -1626,6 +1820,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      **/
     public static function showList($options, $type = 'search')
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $DBread = DBConnection::getReadConnection();
@@ -1633,7 +1828,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
        // Default values of parameters
         $params['faq']                       = !Session::haveRight(self::$rightname, READ);
         $params["start"]                     = "0";
-        $params["knowbaseitemcategories_id"] = "0";
+        $params["knowbaseitemcategories_id"] = null;
         $params["contains"]                  = "";
         $params["target"]                    = $_SERVER['PHP_SELF'];
 
@@ -1836,38 +2031,27 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
                     );
                 }
 
-                $categ = $data["category"];
-                $inst = new KnowbaseItemCategory();
-                if (DropdownTranslation::canBeTranslated($inst)) {
-                    $tcateg = DropdownTranslation::getTranslatedValue(
-                        $data["knowbaseitemcategories_id"],
-                        $inst->getType()
+                $categories_names = [];
+                $ki->getFromDB($data["id"]);
+                $categories = KnowbaseItem_KnowbaseItemCategory::getItems($ki);
+                foreach ($categories as $category) {
+                    $knowbaseitemcategories_id = $category['knowbaseitemcategories_id'];
+                    $fullcategoryname          = getTreeValueCompleteName(
+                        "glpi_knowbaseitemcategories",
+                        $knowbaseitemcategories_id
                     );
-                    if (!empty($tcateg)) {
-                          $categ = $tcateg;
-                    }
-                }
-
-                if ($output_type == Search::HTML_OUTPUT) {
-                    $tmp = [];
-                    $ki->getFromDB($data["id"]);
-                    $categories = KnowbaseItem_KnowbaseItemCategory::getItems($ki);
-                    foreach ($categories as $category) {
-                        $knowbaseitemcategories_id = $category['knowbaseitemcategories_id'];
-                        $fullcategoryname          = getTreeValueCompleteName(
-                            "glpi_knowbaseitemcategories",
-                            $knowbaseitemcategories_id
-                        );
+                    if ($output_type == Search::HTML_OUTPUT) {
                         $cathref = $ki->getSearchURL() . "?knowbaseitemcategories_id=" .
                               $knowbaseitemcategories_id . '&amp;forcetab=Knowbase$2';
-                        $tmp[] = "<a class='kb-category'"
-                         . " href='$cathref'"
-                         . " data-category-id='" . $knowbaseitemcategories_id . "'"
-                         . ">" . $fullcategoryname . '</a>';
+                        $categories_names[] = "<a class='kb-category'"
+                            . " href='$cathref'"
+                            . " data-category-id='" . $knowbaseitemcategories_id . "'"
+                            . ">" . $fullcategoryname . '</a>';
+                    } else {
+                        $categories_names[] = $fullcategoryname;
                     }
-                    $categ = implode(', ', $tmp);
                 }
-                echo Search::showItem($output_type, $categ, $item_num, $row_num);
+                echo Search::showItem($output_type, implode(', ', $categories_names), $item_num, $row_num);
 
                 if ($output_type == Search::HTML_OUTPUT) {
                     echo "<td class='center'>";
@@ -1897,7 +2081,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
                     && isset($options['item_items_id'])
                     && ($output_type == Search::HTML_OUTPUT)
                 ) {
-                    $forcetab = $options['item_itemtype'] . '$1';
+                    $forcetab = $options['item_itemtype'] . '$main';
                     $item_itemtype = $options['item_itemtype'];
                     $content = "<a href='" . $item_itemtype::getFormURLWithID($options['item_items_id']) .
                               "&amp;load_kb_sol=" . $data['id'] .
@@ -1942,16 +2126,17 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      * @param string $type    type : recent / popular / not published
      * @param bool   $display if false, return html
      *
-     * @return void
+     * @return void|string
      **/
     public static function showRecentPopular(string $type = "", bool $display = true)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $faq = !Session::haveRight(self::$rightname, READ);
 
         $criteria = [
-            'SELECT'    => ['glpi_knowbaseitems.*'],
+            'SELECT'    => ['glpi_knowbaseitems' => ['id', 'name', 'is_faq']],
             'DISTINCT'  => true,
             'FROM'      => self::getTable(),
             'WHERE'     => [],
@@ -1959,10 +2144,10 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
         ];
 
         if ($type == "recent") {
-            $criteria['ORDERBY'] = 'date_creation DESC';
+            $criteria['ORDERBY'] = self::getTable() . '.date_creation DESC';
             $title   = __('Recent entries');
         } else if ($type == 'lastupdate') {
-            $criteria['ORDERBY'] = 'date_mod DESC';
+            $criteria['ORDERBY'] = self::getTable() . '.date_mod DESC';
             $title   = __('Last updated entries');
         } else {
             $criteria['ORDERBY'] = 'view DESC';
@@ -2200,7 +2385,9 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
         } else {
             $answer = $this->fields["answer"];
         }
-        $answer = RichText::getEnhancedHtml($answer);
+        $answer = RichText::getEnhancedHtml($answer, [
+            'text_maxsize' => 0 // Show all text without read more button
+        ]);
 
         $callback = function ($matches) {
           //1 => tag name, 2 => existing attributes, 3 => title contents
@@ -2282,6 +2469,7 @@ class KnowbaseItem extends CommonDBVisible implements ExtraVisibilityCriteria
      */
     public static function getForCategory($category_id, $kbi = null)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if ($kbi === null) {

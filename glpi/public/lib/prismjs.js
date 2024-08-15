@@ -1,7 +1,7 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 471:
+/***/ 38:
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -11,7 +11,7 @@ __webpack_require__.r(__webpack_exports__);
 
 /***/ }),
 
-/***/ 466:
+/***/ 33:
 /***/ (() => {
 
 Prism.languages.apacheconf = {
@@ -65,7 +65,7 @@ Prism.languages.apacheconf = {
 
 /***/ }),
 
-/***/ 467:
+/***/ 34:
 /***/ (() => {
 
 (function (Prism) {
@@ -299,7 +299,7 @@ Prism.languages.apacheconf = {
 
 /***/ }),
 
-/***/ 468:
+/***/ 35:
 /***/ (() => {
 
 Prism.languages.clike = {
@@ -337,7 +337,7 @@ Prism.languages.clike = {
 
 /***/ }),
 
-/***/ 465:
+/***/ 32:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
 /// <reference lib="WebWorker"/>
@@ -1607,7 +1607,7 @@ if (typeof __webpack_require__.g !== 'undefined') {
 
 /***/ }),
 
-/***/ 469:
+/***/ 36:
 /***/ (() => {
 
 // https://www.json.org/json-en.html
@@ -1641,7 +1641,7 @@ Prism.languages.webmanifest = Prism.languages.json;
 
 /***/ }),
 
-/***/ 470:
+/***/ 37:
 /***/ (() => {
 
 (function (Prism) {
@@ -1754,8 +1754,6 @@ Prism.languages.webmanifest = Prism.languages.json;
 /******/ 	
 /************************************************************************/
 var __webpack_exports__ = {};
-// This entry need to be wrapped in an IIFE because it need to be isolated against other modules in the chunk.
-(() => {
 /**
  * ---------------------------------------------------------------------
  *
@@ -1763,7 +1761,7 @@ var __webpack_exports__ = {};
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -1790,15 +1788,13 @@ var __webpack_exports__ = {};
  */
 
 // Prismjs used components
-__webpack_require__(465);
-__webpack_require__(466);
-__webpack_require__(467);
-__webpack_require__(468);
-__webpack_require__(469);
-__webpack_require__(470);
-__webpack_require__(471);
-
-})();
+__webpack_require__(32);
+__webpack_require__(33);
+__webpack_require__(34);
+__webpack_require__(35);
+__webpack_require__(36);
+__webpack_require__(37);
+__webpack_require__(38);
 
 /******/ })()
 ;

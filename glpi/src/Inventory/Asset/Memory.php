@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @copyright 2010-2022 by the FusionInventory Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
@@ -41,11 +41,6 @@ use Glpi\Inventory\Conf;
 
 class Memory extends Device
 {
-    public function __construct(CommonDBTM $item, array $data = null)
-    {
-        parent::__construct($item, $data, 'Item_DeviceMemory');
-    }
-
     public function prepare(): array
     {
         $mapping = [
@@ -110,5 +105,10 @@ class Memory extends Device
     public function checkConf(Conf $conf): bool
     {
         return $conf->component_memory == 1;
+    }
+
+    public function getItemtype(): string
+    {
+        return \Item_DeviceMemory::class;
     }
 }

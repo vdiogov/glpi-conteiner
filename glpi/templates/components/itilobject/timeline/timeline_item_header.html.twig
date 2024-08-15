@@ -5,7 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2022 Teclib' and contributors.
+ # @copyright 2015-2024 Teclib' and contributors.
  # @copyright 2003-2014 by the INDEPNET Development Team.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
@@ -31,16 +31,15 @@
  # ---------------------------------------------------------------------
  #}
 
-{% set anchor = entry['type'] ~ '_' ~ entry_i['id'] %}
-
-<div class="d-flex timeline-header" id="{{ anchor }}">
+<div class="d-flex timeline-header">
    <div class="d-flex creator">
       {{ include('components/itilobject/timeline/timeline_item_header_badges.html.twig', {
          'users_id': users_id,
+         'user_object': user_object,
          'date_creation': date_creation,
          'date_mod': date_mod,
          'users_id_editor': entry_i['users_id_editor'],
-         'anchor': anchor,
+         'anchor': entry['type'] ~ '_' ~ entry_i['id'],
          'anonym_user': anonym_user,
       }, with_context = false) }}
    </div>
@@ -66,31 +65,33 @@
          </span>
       {% endif %}
 
-      {% if is_promoted %}
-         {% set promoted_btn %}
-            <li>
-               <a class="dropdown-item text-warning" href="{{ 'Ticket'|itemtype_form_path(entry_i['sourceof_items_id']) }}">
-                  <i class="fa-fw ti ti-git-branch"></i>
-                  <span>{{ __('%s was already promoted')|format(entry['type']|itemtype_name) }}</span>
-               </a>
-            </li>
-         {% endset %}
-         {% set actions = actions|merge({promoted_btn}) %}
-      {% elseif get_current_interface() == 'central' and item.getType() is same as 'Ticket' and item.canCreate() and (entry['type'] is same as 'ITILFollowup' or entry['type'] is same as 'TicketTask')  %}
-         {% set promote_url = '?_promoted_fup_id=' ~ entry_i['id'] %}
-         {% if entry['type'] is same as 'TicketTask' %}
-            {% set promote_url = '?_promoted_task_id=' ~ entry_i['id'] %}
-         {% endif %}
+      {% if entry_i['can_promote'] %}
+         {% if entry_i['sourceof_items_id'] > 0 %}
+            {% set promoted_btn %}
+               <li>
+                  <a class="dropdown-item text-warning" href="{{ 'Ticket'|itemtype_form_path(entry_i['sourceof_items_id']) }}">
+                     <i class="fa-fw ti ti-git-branch"></i>
+                     <span>{{ __('%s was already promoted')|format(entry['type']|itemtype_name) }}</span>
+                  </a>
+               </li>
+            {% endset %}
+            {% set actions = actions|merge({promoted_btn}) %}
+         {% else %}
+            {% set promote_url = '?_promoted_fup_id=' ~ entry_i['id'] %}
+            {% if entry['type'] is same as 'TicketTask' %}
+               {% set promote_url = '?_promoted_task_id=' ~ entry_i['id'] %}
+            {% endif %}
 
-         {% set promote_btn %}
-            <li>
-               <a class="dropdown-item" href="{{ 'Ticket'|itemtype_form_path ~ promote_url }}">
-                  <i class="fa-fw ti ti-git-branch"></i>
-                  <span>{{ __('Promote to Ticket') }}</span>
-               </a>
-            </li>
-         {% endset %}
-         {% set actions = actions|merge({promote_btn}) %}
+            {% set promote_btn %}
+               <li>
+                  <a class="dropdown-item" href="{{ 'Ticket'|itemtype_form_path ~ promote_url }}">
+                     <i class="fa-fw ti ti-git-branch"></i>
+                     <span>{{ __('Promote to Ticket') }}</span>
+                  </a>
+               </li>
+            {% endset %}
+            {% set actions = actions|merge({promote_btn}) %}
+         {% endif %}
       {% endif %}
 
       {% if actions|length %}

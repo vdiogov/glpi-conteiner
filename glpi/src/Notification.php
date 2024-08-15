@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -166,6 +166,9 @@ class Notification extends CommonDBTM
             $menu['options']['notification']['page']            = Notification::getSearchURL(false);
             $menu['options']['notification']['links']['add']    = Notification::getFormURL(false);
             $menu['options']['notification']['links']['search'] = Notification::getSearchURL(false);
+            //saved search list
+            $menu['options']['notification']['links']['lists']  = "";
+            $menu['options']['notification']['lists_itemtype']  = Notification::getType();
 
             $menu['options']['notificationtemplate']['title']
                         = _n('Notification template', 'Notification templates', Session::getPluralNumber());
@@ -175,6 +178,9 @@ class Notification extends CommonDBTM
                         = NotificationTemplate::getFormURL(false);
             $menu['options']['notificationtemplate']['links']['search']
                         = NotificationTemplate::getSearchURL(false);
+            //saved search list
+            $menu['options']['notificationtemplate']['links']['lists']  = "";
+            $menu['options']['notificationtemplate']['lists_itemtype']  = NotificationTemplate::getType();
         }
         if (count($menu)) {
             return $menu;
@@ -199,6 +205,7 @@ class Notification extends CommonDBTM
 
     public function showForm($ID, array $options = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $this->initForm($ID, $options);
@@ -312,6 +319,7 @@ class Notification extends CommonDBTM
     public static function getSpecificValueToSelect($field, $name = '', $values = '', array $options = [])
     {
 
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!is_array($values)) {
@@ -459,6 +467,14 @@ class Notification extends CommonDBTM
             'table'              => $this->getTable(),
             'field'              => 'is_recursive',
             'name'               => __('Child entities'),
+            'datatype'           => 'bool'
+        ];
+
+        $tab[] = [
+            'id'                 => '87',
+            'table'              => $this->getTable(),
+            'field'              => 'allow_response',
+            'name'               => __('Allow response'),
             'datatype'           => 'bool'
         ];
 
@@ -618,6 +634,7 @@ class Notification extends CommonDBTM
      **/
     public static function getMailingSignature($entity)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $signature = trim(Entity::getUsedConfig('mailing_signature', $entity, '', ''));
@@ -634,11 +651,15 @@ class Notification extends CommonDBTM
      * @param string $itemtype Item type
      * @param int    $entity   Restrict to entity
      *
-     * @return ResultSet
+     * @return DBmysqlIterator
      **/
     public static function getNotificationsByEventAndType($event, $itemtype, $entity)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $criteria = [
             'SELECT'    => [

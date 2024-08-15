@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,6 +35,7 @@
 
 use Glpi\Application\View\TemplateRenderer;
 use Glpi\Features\AssetImage;
+use Glpi\Toolbox\Sanitizer;
 
 /// CommonDropdown class - generic dropdown
 abstract class CommonDropdown extends CommonDBTM
@@ -76,7 +77,7 @@ abstract class CommonDropdown extends CommonDBTM
      *
      * @since 0.85
      *
-     * @return true if translation is available, false otherwise
+     * @return boolean true if translation is available, false otherwise
      **/
     public function maybeTranslated()
     {
@@ -121,6 +122,9 @@ abstract class CommonDropdown extends CommonDBTM
                         $menu['options'][$key]['page']            = $tmp->getSearchURL(false);
                         $menu['options'][$key]['icon']            = $tmp->getIcon();
                         $menu['options'][$key]['links']['search'] = $tmp->getSearchURL(false);
+                        //saved search list
+                        $menu['options'][$key]['links']['lists']  = "";
+                        $menu['options'][$key]['lists_itemtype']  = $tmp::getType();
                         if ($tmp->canCreate()) {
                             $menu['options'][$key]['links']['add'] = $tmp->getFormURL(false);
                         }
@@ -144,6 +148,7 @@ abstract class CommonDropdown extends CommonDBTM
      **/
     public function getAdditionalFields()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $fields = [];
@@ -185,6 +190,20 @@ abstract class CommonDropdown extends CommonDBTM
             ];
         }
         return $fields;
+    }
+
+    /**
+     * Return properties of additional field having given name.
+     */
+    final public function getAdditionalField(string $name): ?array
+    {
+        foreach ($this->getAdditionalFields() as $field) {
+            if ($field['name'] === $name) {
+                return $field;
+            }
+        }
+
+        return null;
     }
 
 
@@ -236,6 +255,7 @@ abstract class CommonDropdown extends CommonDBTM
      **/
     public function prepareInputForAdd($input)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // if item based on location, create item in the same entity as location
@@ -285,7 +305,7 @@ abstract class CommonDropdown extends CommonDBTM
         parent::post_addItem();
     }
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
         $this->addFilesFromRichText();
 
@@ -319,9 +339,9 @@ abstract class CommonDropdown extends CommonDBTM
         $fields = $this->getAdditionalFields();
         foreach ($fields as $field) {
             $type           = $field['type'] ?? '';
-            $disable_images = $field['disable_images'] ?? false;
-            if ($type === 'tinymce' && !$disable_images) {
-                // Add files from inline images
+            $convert_images = $field['convert_images_to_documents'] ?? true;
+            if ($type === 'tinymce' && $convert_images) {
+                // Convert inline images into documents
                 $this->input = $this->addFiles(
                     $this->input,
                     [
@@ -397,6 +417,7 @@ abstract class CommonDropdown extends CommonDBTM
 
     public function rawSearchOptions()
     {
+        /** @var \DBmysql $DB */
         global $DB;
         $tab = [];
 
@@ -516,44 +537,68 @@ abstract class CommonDropdown extends CommonDBTM
     }
 
 
-    /** Check if the dropdown $ID is used into item tables
+    /**
+     * Check if the dropdown $ID is used into item tables
      *
      * @return boolean : is the value used ?
-     **/
+     */
     public function isUsed()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
-        $ID = $this->fields['id'];
-
         $RELATION = getDbRelations();
-        if (isset($RELATION[$this->getTable()])) {
-            foreach ($RELATION[$this->getTable()] as $tablename => $field) {
-                if ($tablename[0] != '_') {
-                    if (!is_array($field)) {
-                        $row = $DB->request([
-                            'FROM'   => $tablename,
-                            'COUNT'  => 'cpt',
-                            'WHERE'  => [$field => $ID]
-                        ])->current();
-                        if ($row['cpt'] > 0) {
-                             return true;
-                        }
+
+        if (!array_key_exists($this->getTable(), $RELATION)) {
+            return false;
+        }
+
+        foreach ($RELATION[$this->getTable()] as $tablename => $fields) {
+            if ($tablename[0] == '_') {
+                continue; // Ignore relations prefxed by `_`
+            }
+
+            $or_criteria = [];
+
+            foreach ($fields as $field) {
+                if (is_array($field)) {
+                    // Relation based on 'itemtype'/'items_id' (polymorphic relationship)
+                    if ($this instanceof IPAddress && in_array('mainitemtype', $field) && in_array('mainitems_id', $field)) {
+                        // glpi_ipaddresses relationship that does not respect naming conventions
+                        $itemtype_field = 'mainitemtype';
+                        $items_id_field = 'mainitems_id';
                     } else {
-                        foreach ($field as $f) {
-                             $row = $DB->request([
-                                 'FROM'   => $tablename,
-                                 'COUNT'  => 'cpt',
-                                 'WHERE'  => [$f => $ID]
-                             ])->current();
-                            if ($row['cpt'] > 0) {
-                                return true;
-                            }
-                        }
+                        $itemtype_matches = preg_grep('/^itemtype/', $field);
+                        $items_id_matches = preg_grep('/^items_id/', $field);
+                        $itemtype_field = reset($itemtype_matches);
+                        $items_id_field = reset($items_id_matches);
                     }
+                    $or_criteria[] = [
+                        $itemtype_field => $this->getType(),
+                        $items_id_field => $this->getID(),
+                    ];
+                } else {
+                    // Relation based on single foreign key
+                    $or_criteria[] = [
+                        $field => $this->getID(),
+                    ];
                 }
             }
+
+            if (count($or_criteria) === 0) {
+                return false;
+            }
+
+            $row = $DB->request([
+                'FROM'   => $tablename,
+                'COUNT'  => 'cpt',
+                'WHERE'  => ['OR' => $or_criteria]
+            ])->current();
+            if ($row['cpt'] > 0) {
+                 return true;
+            }
         }
+
         return false;
     }
 
@@ -653,6 +698,7 @@ abstract class CommonDropdown extends CommonDBTM
      **/
     public function findID(array &$input)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!empty($input["name"])) {
@@ -706,6 +752,8 @@ abstract class CommonDropdown extends CommonDBTM
             return -1;
         }
 
+        $input = Sanitizer::sanitize($input);
+
        // Check twin :
         if ($ID = $this->findID($input)) {
             if ($ID > 0) {
@@ -720,7 +768,7 @@ abstract class CommonDropdown extends CommonDBTM
     /**
      * Import a value in a dropdown table.
      *
-     * This import a new dropdown if it doesn't exist - Play dictionnary if needed
+     * This import a new dropdown if it doesn't exist - Play dictionary if needed
      *
      * @param string  $value           Value of the new dropdown (need to be addslashes)
      * @param integer $entities_id     Entity in case of specific dropdown (default -1)
@@ -744,7 +792,7 @@ abstract class CommonDropdown extends CommonDBTM
             return 0;
         }
 
-        $ruleinput      = ["name" => stripslashes($value)];
+        $ruleinput      = ["name" => $value];
         $rulecollection = RuleCollection::getClassByType($this->getType(), true);
 
         foreach ($this->additional_fields_for_dictionnary as $field) {
@@ -766,14 +814,14 @@ abstract class CommonDropdown extends CommonDBTM
             break;
        }*/
 
-        $input = [
+        $input = Sanitizer::sanitize([
             'name'        => $value,
             'comment'     => $comment,
             'entities_id' => $entities_id,
-        ];
+        ]);
 
         if ($rulecollection) {
-            $res_rule = $rulecollection->processAllRules(Toolbox::stripslashes_deep($ruleinput), [], []);
+            $res_rule = $rulecollection->processAllRules(Sanitizer::dbUnescapeRecursive($ruleinput), [], []);
             if (isset($res_rule["name"])) {
                 $input["name"] = $res_rule["name"];
             }
@@ -839,7 +887,7 @@ abstract class CommonDropdown extends CommonDBTM
         CommonDBTM $item,
         array $ids
     ) {
-
+        /** @var CommonDropdown $item */
         switch ($ma->getAction()) {
             case 'merge':
                 $fk = $item->getForeignKeyField();
@@ -858,21 +906,21 @@ abstract class CommonDropdown extends CommonDBTM
                             }
                         } else {
                             $input2 = $item->fields;
-                         // Remove keys (and name, tree dropdown will use completename)
+                            // Remove keys (and name, tree dropdown will use completename)
                             if ($item instanceof CommonTreeDropdown) {
                                 unset($input2['id'], $input2['name'], $input2[$fk]);
                             } else {
                                 unset($input2['id']);
                             }
-                      // Change entity
+                            // Change entity
                             $input2['entities_id']  = $_SESSION['glpiactive_entity'];
                             $input2['is_recursive'] = 1;
                             $input2 = Toolbox::addslashes_deep($input2);
-                      // Import new
+                            // Import new
                             if ($newid = $item->import($input2)) {
                                // Delete old
                                 if ($newid > 0 && $key != $newid) {
-                               // delete with purge for dropdown with trashbin (Budget)
+                                    // delete with purge for dropdown with trashbin (Budget)
                                     $item->delete(['id'          => $key,
                                         '_replace_by' => $newid
                                     ], 1);
@@ -903,6 +951,7 @@ abstract class CommonDropdown extends CommonDBTM
      **/
     public function getLinks($withname = false)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $ret = '';
@@ -936,8 +985,7 @@ abstract class CommonDropdown extends CommonDBTM
                 $kbitem->getFromDB(reset($found_kbitem)['id']);
                 $ret .= "<div class='faqadd_block'>";
                 $ret .= "<label for='display_faq_chkbox$rand'>";
-                $ret .= "<img src='" . $CFG_GLPI["root_doc"] . "/pics/faqadd.png' class='middle pointer'
-                      alt=\"$title\" title=\"$title\">";
+                $ret .= "<i class='ti ti-zoom-question'></i>";
                 $ret .= "</label>";
                 $ret .= "<input type='checkbox'  class='display_faq_chkbox' id='display_faq_chkbox$rand'>";
                 $ret .= "<div class='faqadd_entries'>";
@@ -947,16 +995,16 @@ abstract class CommonDropdown extends CommonDBTM
                     $ret .= "</div>"; // .faqadd_block_content
                 } else {
                     $ret .= Html::scriptBlock("
-                  var getKnowbaseItemAnswer$rand = function() {
-                     var knowbaseitems_id = $('#dropdown_knowbaseitems_id$rand').val();
-                     $('#faqadd_block_content$rand').load(
-                        '" . $CFG_GLPI['root_doc'] . "/ajax/getKnowbaseItemAnswer.php',
-                        {
-                           'knowbaseitems_id': knowbaseitems_id
-                        }
-                     );
-                  };
-               ");
+                        var getKnowbaseItemAnswer$rand = function() {
+                            var knowbaseitems_id = $('#dropdown_knowbaseitems_id$rand').val();
+                            $('#faqadd_block_content$rand').load(
+                                '" . $CFG_GLPI['root_doc'] . "/ajax/getKnowbaseItemAnswer.php',
+                                {
+                                    'knowbaseitems_id': knowbaseitems_id
+                                }
+                            );
+                        };
+                    ");
                     $ret .= "<label for='dropdown_knowbaseitems_id$rand'>" .
                     KnowbaseItem::getTypeName() . "</label>&nbsp;";
                     $ret .= KnowbaseItem::dropdown([
@@ -970,6 +1018,14 @@ abstract class CommonDropdown extends CommonDBTM
                     $ret .= $kbitem->showFull(['display' => false]);
                     $ret .= "</div>"; // .faqadd_block_content
                 }
+                $ret .= Html::scriptBlock("
+                        var setMaxWidth = function() {
+                            var maxWidth = $('#faqadd_block_content$rand').closest('.form-field').width();
+                            $('.faqadd_entries').css('max-width', maxWidth);
+                        }
+                        $(window).resize(setMaxWidth);
+                        setMaxWidth();
+                    ");
                 $ret .= "</div>"; // .faqadd_entries
                 $ret .= "</div>"; // .faqadd_block
             }

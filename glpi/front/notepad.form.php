@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -81,4 +81,12 @@ if (isset($_POST['add'])) {
     );
     Html::back();
 }
-Html::displayErrorAndDie("lost");
+
+if (isset($_GET['id']) && $note->getFromDB($_GET['id'])) {
+    /** @var class-string<CommonDBTM> $parent_itemtype */
+    $parent_itemtype = $note->fields['itemtype'];
+    $redirect = $parent_itemtype::getFormURLWithID($note->fields['items_id'], true) . "&forcetab=Notepad$1";
+    Html::redirect($redirect);
+} else {
+    Html::displayErrorAndDie("lost");
+}

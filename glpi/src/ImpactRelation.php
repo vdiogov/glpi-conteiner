@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -46,6 +46,7 @@ class ImpactRelation extends CommonDBRelation
 
     public function prepareInputForAdd($input)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // Check that mandatory values are set
@@ -108,6 +109,7 @@ class ImpactRelation extends CommonDBRelation
      */
     public static function getIDFromInput(array $input)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // Check that the link exist

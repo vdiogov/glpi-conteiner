@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -141,7 +141,7 @@ class Inventory
             $data = json_decode($converter->convert($contentdata));
         } else {
             $this->inventory_tmpfile = tempnam(GLPI_INVENTORY_DIR, 'json_');
-            $contentdata = json_encode($data);
+            $contentdata = json_encode($data, JSON_PRETTY_PRINT);
         }
 
         try {
@@ -197,6 +197,7 @@ class Inventory
             'deviceid' => $this->raw_data->deviceid,
             'version' => $this->raw_data->version ?? $this->raw_data->content->versionclient ?? null,
             'itemtype' => $this->raw_data->itemtype ?? 'Computer',
+            'port'      => $this->raw_data->{'httpd-port'} ?? null,
         ];
 
         if (property_exists($this->raw_data, 'content') && property_exists($this->raw_data->content, 'versionprovider')) {
@@ -237,6 +238,7 @@ class Inventory
      */
     public function doInventory($test_rules = false)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         //check
@@ -250,9 +252,12 @@ class Inventory
             $_SESSION['glpiinventoryuserrunning'] = 'inventory';
         }
 
+        if (!isset($_SESSION['glpiname'])) {
+            $_SESSION['glpiname'] = $_SESSION['glpiinventoryuserrunning'];
+        }
+
+        $main_start = microtime(true); //bench
         try {
-            //bench
-            $main_start = microtime(true);
             if (!$DB->inTransaction()) {
                 $DB->beginTransaction();
             }
@@ -270,12 +275,25 @@ class Inventory
             if (method_exists($this, 'getSchemaExtraProps')) {
                 $properties = array_merge(
                     $properties,
-                    $this->getSchemaExtraProps()
+                    array_keys($this->getSchemaExtraProps())
                 );
             }
             $contents = $this->raw_data->content;
             $all_props = get_object_vars($contents);
             unset($all_props['versionclient'], $all_props['versionprovider']); //already handled in extractMetadata
+
+            $empty_props = [];
+            if (
+                (!property_exists($this->raw_data, 'itemtype') || $this->raw_data->itemtype == 'Computer')
+                && (!property_exists($this->raw_data, 'partial') || !$this->raw_data->partial)
+            ) {
+                //if inventory is not partial, we consider following properties are empty if not present; so they'll be removed
+                $empty_props = [
+                    'virtualmachines',
+                    'remote_mgmt',
+                    'monitors'
+                ];
+            }
 
             $data = [];
             //parse schema properties and handle if it exists in raw_data
@@ -283,6 +301,8 @@ class Inventory
             foreach ($properties as $property) {
                 if (property_exists($contents, $property)) {
                     $data[$property] = $contents->$property;
+                } else if (in_array($property, $empty_props)) {
+                    $data[$property] = [];
                 }
             }
 
@@ -345,7 +365,7 @@ class Inventory
                     $DB->commit();
                 }
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $DB->rollback();
             throw $e;
         } finally {
@@ -378,6 +398,10 @@ class Inventory
      */
     public function getItems(): array
     {
+        if ($this->mainasset === null) {
+            return [];
+        }
+
         $items = $this->mainasset->getInventoried();
 
         foreach ($this->mainasset->getRefused() as $refused) {
@@ -389,9 +413,9 @@ class Inventory
 
 
     /**
-     * Get rawdata
+     * Get raw data
      *
-     * @return array
+     * @return object|null
      */
     public function getRawData(): ?object
     {
@@ -493,7 +517,7 @@ class Inventory
             ];
         }
 
-        if (Session::haveRight(Lockedfield::$rightname, READ)) {
+        if (Session::haveRight(Lockedfield::$rightname, UPDATE)) {
             $menu['options']['lockedfield'] = [
                 'icon'  => Lockedfield::getIcon(),
                 'title' => Lockedfield::getTypeName(Session::getPluralNumber()),
@@ -550,7 +574,7 @@ class Inventory
      */
     final public function processInventoryData()
     {
-       //map existing keys in inventory format to their respective Inventory\Asset class if needed.
+        //map existing keys in inventory format to their respective Inventory\Asset class if needed.
         foreach ($this->data as $key => &$value) {
             $assettype = false;
 
@@ -802,7 +826,7 @@ class Inventory
         return $this->metadata;
     }
 
-    public function getMainAsset(): InventoryAsset
+    public function getMainAsset(): MainAsset
     {
         return $this->mainasset;
     }
@@ -867,6 +891,7 @@ class Inventory
      **/
     public static function cronCleanorphans($task)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $cron_status = 0;
@@ -877,7 +902,8 @@ class Inventory
         foreach ($existing_types as $existing_type) {
             /** @var class-string<CommonDBTM> $itemtype */
             $itemtype = str_replace(GLPI_INVENTORY_DIR . '/', '', $existing_type);
-           //$invnetoryfiles = new RecursiveIteratorIterator(new RecursiveDirectoryIterator('path/to/folder'));
+            // use `getItemForItemtype` to fix classname case (i.e. `refusedequipement` -> `RefusedEquipement`)
+            $itemtype = getItemForItemtype($itemtype)::getType();
             $inventory_files = new \RegexIterator(
                 new \RecursiveIteratorIterator(
                     new \RecursiveDirectoryIterator($existing_type)
@@ -906,16 +932,29 @@ class Inventory
                  return;
             }
 
-           //find missing assets
+            //find missing assets
             $orphans = array_diff(
                 array_keys($ids),
                 array_keys(iterator_to_array($iterator))
             );
 
             foreach ($orphans as $orphan) {
-                 $dropfile = $ids[$orphan]->getFileName();
-                 @unlink($dropfile);
-                 $message = sprintf(__('File %1$s has been removed'), $dropfile);
+                $dropfile = $ids[$orphan];
+                $res = @unlink($dropfile->getRealPath());
+                if (!$res) {
+                    trigger_error(sprintf(__('Unable to remove file %1$s'), $dropfile->getRealPath()), E_USER_WARNING);
+                    $message = sprintf(
+                        __('File %1$s %2$s has not been removed'),
+                        $itemtype,
+                        $dropfile->getFileName()
+                    );
+                } else {
+                    $message = sprintf(
+                        __('File %1$s %2$s has been removed'),
+                        $itemtype,
+                        $dropfile->getFileName()
+                    );
+                }
                 if ($task) {
                     $task->log($message);
                     $task->addVolume(1);

@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -32,7 +32,7 @@
  */
 
 // jQuery File Upload plugin
-require('../../vendor/blueimp/jquery-file-upload/js/jquery.fileupload');
-require('../../vendor/blueimp/jquery-file-upload/js/jquery.iframe-transport');
-require('../../vendor/blueimp/jquery-file-upload/js/jquery.fileupload-process');
-require('../../vendor/blueimp/jquery-file-upload/js/jquery.fileupload-validate');
+require('../blueimp/jquery-file-upload/jquery.fileupload');
+require('../blueimp/jquery-file-upload/jquery.iframe-transport');
+require('../blueimp/jquery-file-upload/jquery.fileupload-process');
+require('../blueimp/jquery-file-upload/jquery.fileupload-validate');

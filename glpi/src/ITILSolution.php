@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -113,8 +113,16 @@ class ITILSolution extends CommonDBChild
 
     public function post_getFromDB()
     {
-        $this->item = new $this->fields['itemtype']();
-        $this->item->getFromDB($this->fields['items_id']);
+        // Bandaid to avoid loading parent item if not needed
+        // TODO: replace by proper lazy loading in GLPI 10.1
+        if (
+            $this->item == null // No item loaded
+            || $this->item->getType() !== $this->fields['itemtype'] // Another item is loaded
+            || $this->item->getID() !== $this->fields['items_id']   // Another item is loaded
+        ) {
+            $this->item = new $this->fields['itemtype']();
+            $this->item->getFromDB($this->fields['items_id']);
+        }
     }
 
     /**
@@ -220,41 +228,43 @@ class ITILSolution extends CommonDBChild
             $input = array_replace($template_fields, $input);
         }
 
-       // check itil object is not already solved
-        if (in_array($this->item->fields["status"], $this->item->getSolvedStatusArray())) {
-            Session::addMessageAfterRedirect(
-                __("The item is already solved, did anyone pushed a solution before you?"),
-                false,
-                ERROR
-            );
-            return false;
-        }
-
-       //default status for global solutions
-        $status = CommonITILValidation::ACCEPTED;
-
-       //handle autoclose, for tickets only
-        if ($input['itemtype'] == Ticket::getType()) {
-            $autoclosedelay =  Entity::getUsedConfig(
-                'autoclose_delay',
-                $this->item->getEntityID(),
-                '',
-                Entity::CONFIG_NEVER
-            );
-
-           // 0  or ticket status CLOSED = immediately
-            if ($autoclosedelay != 0 && $this->item->fields["status"] != $this->item::CLOSED) {
-                $status = CommonITILValidation::WAITING;
+        if (!$this->item->isStatusComputationBlocked($input)) {
+        // check itil object is not already solved
+            if (in_array($this->item->fields["status"], $this->item->getSolvedStatusArray())) {
+                Session::addMessageAfterRedirect(
+                    __("The item is already solved, did anyone pushed a solution before you?"),
+                    false,
+                    ERROR
+                );
+                return false;
             }
-        }
 
-       //Accepted; store user and date
-        if ($status == CommonITILValidation::ACCEPTED) {
-            $input['users_id_approval'] = Session::getLoginUserID();
-            $input['date_approval'] = $_SESSION["glpi_currenttime"];
-        }
+            //default status for global solutions
+            $status = CommonITILValidation::ACCEPTED;
 
-        $input['status'] = $status;
+            //handle autoclose, for tickets only
+            if ($input['itemtype'] == Ticket::getType()) {
+                $autoclosedelay =  Entity::getUsedConfig(
+                    'autoclose_delay',
+                    $this->item->getEntityID(),
+                    '',
+                    Entity::CONFIG_NEVER
+                );
+
+                // 0  or ticket status CLOSED = immediately
+                if ($autoclosedelay != 0 && $this->item->fields["status"] != $this->item::CLOSED) {
+                    $status = CommonITILValidation::WAITING;
+                }
+            }
+
+            //Accepted; store user and date
+            if ($status == CommonITILValidation::ACCEPTED) {
+                $input['users_id_approval'] = Session::getLoginUserID();
+                $input['date_approval'] = $_SESSION["glpi_currenttime"];
+            }
+
+            $input['status'] = $status;
+        }
 
        // Render twig content, needed for massives action where we the content
        // can't be rendered directly in the form
@@ -269,7 +279,7 @@ class ITILSolution extends CommonDBChild
                 return false;
             }
 
-            $input['content'] = $html;
+            $input['content'] = Sanitizer::sanitize($html);
         }
 
         return $input;
@@ -341,7 +351,7 @@ class ITILSolution extends CommonDBChild
         return $input;
     }
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
         // Handle rich-text images and uploaded documents
         $this->input = $this->addFiles($this->input, ['force_update' => true]);
@@ -412,6 +422,28 @@ class ITILSolution extends CommonDBChild
 
     public static function getIcon()
     {
-        return "fas fa-check";
+        return 'ti ti-check';
+    }
+
+    /**
+     * Allow to set the parent item
+     * Some subclasses will load their parent item in their `post_getFromDB` function
+     * If the parent is already loaded, it might be useful to set it with this method
+     * before loading the item, thus avoiding one useless DB query (or many more queries
+     * when looping on children items)
+     *
+     * TODO 10.1 move method and `item` property into parent class
+     *
+     * @param CommonITILObject $parent Parent item
+     *
+     * @return void
+     */
+    final public function setParentItem(CommonITILObject $parent): void
+    {
+        if (static::$itemtype !== 'itemtype' && !is_a($parent, static::$itemtype)) {
+            throw new LogicException("Invalid parent type");
+        }
+
+        $this->item = $parent;
     }
 }

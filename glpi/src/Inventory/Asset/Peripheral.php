@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @copyright 2010-2022 by the FusionInventory Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
@@ -38,10 +38,10 @@ namespace Glpi\Inventory\Asset;
 
 use Computer_Item;
 use Glpi\Inventory\Conf;
+use Glpi\Toolbox\Sanitizer;
 use Peripheral as GPeripheral;
 use RuleImportAssetCollection;
 use RuleMatchedLog;
-use Toolbox;
 
 class Peripheral extends InventoryAsset
 {
@@ -139,6 +139,7 @@ class Peripheral extends InventoryAsset
 
     public function handle()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $rule = new RuleImportAssetCollection();
@@ -149,11 +150,10 @@ class Peripheral extends InventoryAsset
         $value = $this->data;
 
         foreach ($value as $key => $val) {
-            $handled_input = $this->handleInput($val);
             $input = [
                 'itemtype'     => 'Peripheral',
-                'name'         => $handled_input['name'] ?? '',
-                'serial'       => $handled_input['serial'] ?? '',
+                'name'         => $val->name ?? '',
+                'serial'       => $val->serial ?? '',
                 'entities_id'  => $this->item->fields['entities_id']
             ];
             $data = $rule->processAllRules($input, [], ['class' => $this, 'return' => true]);
@@ -163,11 +163,13 @@ class Peripheral extends InventoryAsset
                 $itemtype = 'Peripheral';
                 if ($data['found_inventories'][0] == 0) {
                     // add peripheral
-                    $handled_input['entities_id'] = $this->entities_id;
-                    $items_id = $peripheral->add(Toolbox::addslashes_deep($handled_input), [], false);
+                    $handled_input = $this->handleInput($val, $peripheral) + ['entities_id' => $this->entities_id];
+                    $items_id = $peripheral->add(Sanitizer::sanitize($handled_input), [], false);
                 } else {
                     $items_id = $data['found_inventories'][0];
-                    $peripheral->update(Toolbox::addslashes_deep(['id' => $items_id] + $handled_input), false);
+                    $peripheral->getFromDB($items_id);
+                    $handled_input = $this->handleInput($val, $peripheral);
+                    $peripheral->update(Sanitizer::sanitize(['id' => $items_id] + $handled_input), false);
                 }
 
                 $peripherals[] = $items_id;
@@ -256,5 +258,10 @@ class Peripheral extends InventoryAsset
     public function checkConf(Conf $conf): bool
     {
         return $conf->import_peripheral == 1;
+    }
+
+    public function getItemtype(): string
+    {
+        return \Peripheral::class;
     }
 }

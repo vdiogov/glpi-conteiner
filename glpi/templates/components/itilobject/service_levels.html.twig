@@ -5,7 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2022 Teclib' and contributors.
+ # @copyright 2015-2024 Teclib' and contributors.
  # @copyright 2003-2014 by the INDEPNET Development Team.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
@@ -163,7 +163,7 @@
                {% endif %}
 
                {% if la_displayed %}
-                  <div class="{{ item.isNewItem ? '' : 'collapsed' }} w-100 mt-1" id="dropdown_{{ assign_la_id }}">
+                  <div class="{{ item.isNewItem() ? '' : 'collapsed' }} w-100 mt-1 d-none" id="dropdown_{{ assign_la_id }}">
                      {{ fields.dropdownField(
                         la_field.la.getType(),
                         la_field.lafieldname,
@@ -206,6 +206,9 @@
 
                            // hide date field
                            $("#date_{{ assign_la_id }}").closest('.la_datefield').hide();
+
+                           // show dropdown field
+                           $('#dropdown_assign_la_{{ rand }}').removeClass('d-none');
 
                            // show level agreement dropdown
                            var myCollapse = new bootstrap.Collapse(document.getElementById('dropdown_{{ assign_la_id }}'));

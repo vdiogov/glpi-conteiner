@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -38,20 +38,6 @@ use Glpi\Event;
 include('../inc/includes.php');
 
 $user = new User();
-
-
-// Manage lost password
-if (isset($_GET['lostpassword'])) {
-    Html::nullHeader();
-    if (isset($_GET['password_forget_token'])) {
-        User::showPasswordForgetChangeForm($_GET['password_forget_token']);
-    } else {
-        User::showPasswordForgetRequestForm();
-    }
-    Html::nullFooter();
-    exit();
-}
-
 
 Session::checkLoginUser();
 

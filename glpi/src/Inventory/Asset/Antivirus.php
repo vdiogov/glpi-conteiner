@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -37,7 +37,7 @@ namespace Glpi\Inventory\Asset;
 
 use ComputerAntivirus;
 use Glpi\Inventory\Conf;
-use Toolbox;
+use Glpi\Toolbox\Sanitizer;
 
 class Antivirus extends InventoryAsset
 {
@@ -72,6 +72,8 @@ class Antivirus extends InventoryAsset
 
             if (!property_exists($val, 'is_uptodate') || empty($val->is_uptodate)) {
                 $val->is_uptodate = 0;
+            } else {
+                $val->is_uptodate = (int)$val->is_uptodate;
             }
 
             $val->is_dynamic = 1;
@@ -87,6 +89,7 @@ class Antivirus extends InventoryAsset
      */
     protected function getExisting(): array
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $db_existing = [];
@@ -109,8 +112,6 @@ class Antivirus extends InventoryAsset
 
     public function handle()
     {
-        global $DB;
-
         $db_antivirus = $this->getExisting();
         $value = $this->data;
         $computerAntivirus = new ComputerAntivirus();
@@ -122,10 +123,11 @@ class Antivirus extends InventoryAsset
             foreach ($db_antivirus as $keydb => $arraydb) {
                 unset($arraydb['is_dynamic']);
                 if ($compare == $arraydb) {
-                    $input = $this->handleInput($val) + [
+                    $computerAntivirus->getFromDB($keydb);
+                    $input = $this->handleInput($val, $computerAntivirus) + [
                         'id'           => $keydb
                     ];
-                    $computerAntivirus->update(Toolbox::addslashes_deep($input));
+                    $computerAntivirus->update(Sanitizer::sanitize($input));
                     unset($value[$k]);
                     unset($db_antivirus[$keydb]);
                     break;
@@ -145,7 +147,8 @@ class Antivirus extends InventoryAsset
             foreach ($value as $val) {
                 $val->computers_id = $this->item->fields['id'];
                 $val->is_dynamic = 1;
-                $computerAntivirus->add(Toolbox::addslashes_deep($this->handleInput($val)));
+                $input = $this->handleInput($val, $computerAntivirus);
+                $computerAntivirus->add(Sanitizer::sanitize($input));
             }
         }
     }
@@ -153,5 +156,10 @@ class Antivirus extends InventoryAsset
     public function checkConf(Conf $conf): bool
     {
         return $conf->import_antivirus == 1;
+    }
+
+    public function getItemtype(): string
+    {
+        return \ComputerAntivirus::class;
     }
 }

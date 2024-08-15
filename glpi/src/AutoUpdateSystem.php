@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,8 +35,20 @@
 
 class AutoUpdateSystem extends CommonDropdown
 {
+    public const NATIVE_INVENTORY = "GLPI Native Inventory";
+
     public static function getTypeName($nb = 0)
     {
         return _n('Update Source', 'Update Sources', $nb);
+    }
+
+    public static function getLabelFor(string $key): string
+    {
+        switch ($key) {
+            case self::NATIVE_INVENTORY:
+                return __('GLPI Native Inventory');
+        }
+
+        return '';
     }
 }

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -83,6 +83,14 @@ if (isset($_POST["add"])) {
     );
     Html::back();
 } else {
+    $template = new NotificationTemplate();
+    if (!isset($_GET["notificationtemplates_id"]) && $_GET["id"] != '') {
+        $language->getFromDB($_GET["id"]);
+        $_GET["notificationtemplates_id"] = $language->fields["notificationtemplates_id"];
+    }
+    $template->getFromDB($_GET["notificationtemplates_id"]);
+    $_SESSION['glpilisturl'][NotificationTemplateTranslation::getType()] = $template->getLinkURL();
+
     if ($_GET["id"] == '') {
         $options = [
             "notificationtemplates_id" => $_GET["notificationtemplates_id"]

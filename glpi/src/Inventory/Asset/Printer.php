@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @copyright 2010-2022 by the FusionInventory Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
@@ -36,7 +36,9 @@
 
 namespace Glpi\Inventory\Asset;
 
+use Blacklist;
 use CommonDBTM;
+use Glpi\Toolbox\Sanitizer;
 use IPAddress;
 use Printer as GPrinter;
 use PrinterLog;
@@ -44,7 +46,6 @@ use PrinterModel;
 use PrinterType;
 use RuleDictionnaryPrinterCollection;
 use RuleImportAssetCollection;
-use Toolbox;
 
 class Printer extends NetworkEquipment
 {
@@ -208,6 +209,7 @@ class Printer extends NetworkEquipment
      */
     protected function handleConnectedPrinter()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $rule = new RuleImportAssetCollection();
@@ -240,7 +242,7 @@ class Printer extends NetworkEquipment
                    // add printer
                     $val->entities_id = $entities_id;
                     $val->is_dynamic = 1;
-                    $items_id = $printer->add(Toolbox::addslashes_deep($this->handleInput($val)));
+                    $items_id = $printer->add(Sanitizer::sanitize($this->handleInput($val, $printer)));
                 } else {
                     $items_id = $data['found_inventories'][0];
                 }
@@ -352,9 +354,9 @@ class Printer extends NetworkEquipment
         $metrics = new PrinterLog();
         if ($metrics->getFromDBByCrit($unicity_input)) {
             $input['id'] = $metrics->fields['id'];
-            $metrics->update($input, false);
+            $metrics->update(Sanitizer::sanitize($input), false);
         } else {
-            $metrics->add($input, [], false);
+            $metrics->add(Sanitizer::sanitize($input), [], false);
         }
     }
 
@@ -365,21 +367,31 @@ class Printer extends NetworkEquipment
      */
     public static function needToBeUpdatedFromDiscovery(CommonDBTM $item, $val)
     {
-        if (property_exists($val, 'ips') && isset($val->ips[0])) {
-            $ip = $val->ips[0];
-            //try to find IP (get from discovery) from known IP of Printer
-            //if found refuse update
-            //if no, printer IP have changed so  we allow the update from discovery
-            $ipadress = new IPAddress($ip);
-            $tmp['mainitems_id'] = $item->fields['id'];
-            $tmp['mainitemtype'] = $item::getType();
-            $tmp['is_dynamic']   = 1;
-            $tmp['name']         = $ipadress->getTextual();
-            if ($ipadress->getFromDBByCrit($tmp)) {
-                return false;
+        if (property_exists($val, 'ips')) {
+            foreach ($val->ips as $ip) {
+                $blacklist = new Blacklist();
+                //exclude IP if needed
+                if ('' != $blacklist->process(Blacklist::IP, $ip)) {
+                    //try to find IP (get from discovery) from known IP of Printer
+                    //if found refuse update
+                    //if no, printer IP have changed so  we allow the update from discovery
+                    $ipadress = new IPAddress($ip);
+                    $tmp['mainitems_id'] = $item->fields['id'];
+                    $tmp['mainitemtype'] = $item::getType();
+                    $tmp['is_dynamic']   = 1;
+                    $tmp['name']         = $ipadress->getTextual();
+                    if ($ipadress->getFromDBByCrit(Sanitizer::sanitize($tmp))) {
+                        return false;
+                    }
+                    return true;
+                }
             }
-            return true;
         }
         return false;
+    }
+
+    public function getItemtype(): string
+    {
+        return \Printer::class;
     }
 }

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -166,6 +166,22 @@ class Appliance extends CommonDBTM
         ];
 
         $tab[] = [
+            'id'                 => '14',
+            'table'              => $this->getTable(),
+            'field'              => 'contact',
+            'name'               => __('Alternate username'),
+            'datatype'           => 'string',
+        ];
+
+        $tab[] = [
+            'id'                 => '15',
+            'table'              => $this->getTable(),
+            'field'              => 'contact_num',
+            'name'               => __('Alternate username number'),
+            'datatype'           => 'string',
+        ];
+
+        $tab[] = [
             'id'            => '23',
             'table'         => 'glpi_manufacturers',
             'field'         => 'name',
@@ -307,6 +323,7 @@ class Appliance extends CommonDBTM
             'itemlink_type'      => 'Appliance',
             'massiveaction'      => false,
             'joinparams'         => [
+                'condition'  => ['NEWTABLE.is_deleted' => 0],
                 'beforejoin' => [
                     'table'      => Appliance_Item::getTable(),
                     'joinparams' => ['jointype' => 'itemtype_item']
@@ -405,6 +422,7 @@ class Appliance extends CommonDBTM
      */
     public static function getTypes($all = false): array
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $types = $CFG_GLPI['appliance_types'];
@@ -441,7 +459,7 @@ class Appliance extends CommonDBTM
     public static function getMassiveActionsForItemtype(
         array &$actions,
         $itemtype,
-        $is_deleted = 0,
+        $is_deleted = false,
         CommonDBTM $checkitem = null
     ) {
         if (in_array($itemtype, self::getTypes())) {
@@ -459,9 +477,7 @@ class Appliance extends CommonDBTM
 
         switch ($ma->getAction()) {
             case 'add_item':
-                Appliance::dropdown([
-                    'entity'  => $_POST['entity_restrict'] ?? 0
-                ]);
+                Appliance::dropdown();
                 echo Html::submit(_x('button', 'Post'), ['name' => 'massiveaction']);
                 return true;
             break;

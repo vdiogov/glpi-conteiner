@@ -5,7 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2022 Teclib' and contributors.
+ # @copyright 2015-2024 Teclib' and contributors.
  # @copyright 2003-2014 by the INDEPNET Development Team.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
@@ -103,8 +103,9 @@ $(function() {
          url: "{{ path('/ajax/priority.php') }}",
          datatype: 'json',
          data: {
-            'urgency': $('#dropdown_urgency{{ rand }}').select2('data')[0].id ?? 0,
-            'impact':  $('#dropdown_impact{{ rand }}').select2('data')[0].id ?? 0,
+            'urgency': $('#dropdown_urgency{{ rand }}').select2('data') ? $('#dropdown_urgency{{ rand }}').select2('data')[0].id : 0,
+            'impact':  $('#dropdown_impact{{ rand }}').select2('data') ? $('#dropdown_impact{{ rand }}').select2('data')[0].id : 0,
+            '_predefined_fields':  $('input[name="_predefined_fields"]').val(),
             'getJson': true,
          }
       }).done(function(data) {

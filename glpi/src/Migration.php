@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -81,7 +81,7 @@ class Migration
     protected $output_handler;
 
     /**
-     * @param integer $ver Version number
+     * @param string $ver Version number
      **/
     public function __construct($ver)
     {
@@ -89,6 +89,7 @@ class Migration
         $this->deb = time();
         $this->version = $ver;
 
+        /** @var \Glpi\Console\Application $application */
         global $application;
         if ($application instanceof Application) {
            // $application global variable will be available if Migration is called from a CLI console command
@@ -101,7 +102,7 @@ class Migration
      *
      * @since 0.84
      *
-     * @param integer $ver Version number
+     * @param string $ver Version number
      *
      * @return void
      **/
@@ -197,7 +198,7 @@ class Migration
        // Do not log if more than 3 log error
         if (
             $this->log_errors < 3
-            && !Toolbox::logInFile($log_file_name, $message . ' @ ', true)
+            && !Toolbox::logInFile($log_file_name, $message . "\n", true)
         ) {
             $this->log_errors++;
         }
@@ -273,7 +274,7 @@ class Migration
                     } else if (in_array($default_value, ['0', '1'])) {
                         $format .= " DEFAULT '$default_value'";
                     } else {
-                        trigger_error(__('default_value must be 0 or 1'), E_USER_ERROR);
+                        throw new \LogicException('Default value must be 0 or 1.');
                     }
                 }
                 break;
@@ -311,7 +312,7 @@ class Migration
                     } else if (is_numeric($default_value)) {
                         $format .= " DEFAULT '$default_value'";
                     } else {
-                        trigger_error(__('default_value must be numeric'), E_USER_ERROR);
+                        throw new \LogicException('Default value must be numeric.');
                     }
                 }
                 break;
@@ -405,6 +406,7 @@ class Migration
      **/
     public function addField($table, $field, $type, $options = [])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $params['update']    = '';
@@ -448,7 +450,7 @@ class Migration
                     $query = "UPDATE `$table`
                         SET `$field` = " . $params['update'] . " " .
                         $params['condition'] . "";
-                    $DB->queryOrDie($query, $this->version . " set $field in $table");
+                    $DB->doQueryOrDie($query, $this->version . " set $field in $table");
                 }
                 return true;
             }
@@ -476,6 +478,7 @@ class Migration
      **/
     public function changeField($table, $oldfield, $newfield, $type, $options = [])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $params['value']     = null;
@@ -514,7 +517,7 @@ class Migration
                 ($oldfield != $newfield)
                 && $DB->fieldExists($table, $newfield)
             ) {
-                $this->change[$table][] = "DROP `$newfield` ";
+                $this->change[$table][] = $DB->buildDrop($newfield, 'FIELD');
             }
 
             if ($format) {
@@ -538,16 +541,17 @@ class Migration
      **/
     public function dropField($table, $field)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if ($DB->fieldExists($table, $field, false)) {
-            $this->change[$table][] = "DROP `$field`";
+            $this->change[$table][] = $DB->buildDrop($field, 'FIELD');
         }
     }
 
 
     /**
-     * Drop immediatly a table if it exists
+     * Drop immediately a table if it exists
      *
      * @param string $table Table name
      *
@@ -555,10 +559,11 @@ class Migration
      **/
     public function dropTable($table)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if ($DB->tableExists($table)) {
-            $DB->query("DROP TABLE `$table`");
+            $DB->dropTable($table);
         }
     }
 
@@ -620,9 +625,10 @@ class Migration
      **/
     public function dropKey($table, $indexname)
     {
-
+        /** @var \DBmysql $DB */
+        global $DB;
         if (isIndex($table, $indexname)) {
-            $this->change[$table][] = "DROP INDEX `$indexname`";
+            $this->change[$table][] = $DB->buildDrop($indexname, 'INDEX');
         }
     }
 
@@ -637,9 +643,10 @@ class Migration
      **/
     public function dropForeignKeyContraint($table, $keyname)
     {
-
+        /** @var \DBmysql $DB */
+        global $DB;
         if (isForeignKeyContraint($table, $keyname)) {
-            $this->change[$table][] = "DROP FOREIGN KEY `$keyname`";
+            $this->change[$table][] = $DB->buildDrop($keyname, 'FOREIGN KEY');
         }
     }
 
@@ -654,11 +661,12 @@ class Migration
      **/
     public function renameTable($oldtable, $newtable)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!$DB->tableExists("$newtable") && $DB->tableExists("$oldtable")) {
             $query = "RENAME TABLE `$oldtable` TO `$newtable`";
-            $DB->queryOrDie($query, $this->version . " rename $oldtable");
+            $DB->doQueryOrDie($query, $this->version . " rename $oldtable");
 
            // Clear possibly forced value of table name.
            // Actually the only forced value in core is for config table.
@@ -717,6 +725,7 @@ class Migration
      **/
     public function copyTable($oldtable, $newtable, bool $insert = true)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (
@@ -728,12 +737,12 @@ class Migration
            // $DB->query($query);
 
             $query = "CREATE TABLE `$newtable` LIKE `$oldtable`";
-            $DB->queryOrDie($query, $this->version . " create $newtable");
+            $DB->doQueryOrDie($query, $this->version . " create $newtable");
 
             if ($insert) {
                //needs DB::insert to support subqueries to get migrated
                 $query = "INSERT INTO `$newtable` (SELECT * FROM `$oldtable`)";
-                $DB->queryOrDie($query, $this->version . " copy from $oldtable to $newtable");
+                $DB->doQueryOrDie($query, $this->version . " copy from $oldtable to $newtable");
             }
         }
     }
@@ -751,6 +760,7 @@ class Migration
      **/
     public function insertInTable($table, array $input)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (
@@ -782,12 +792,13 @@ class Migration
      **/
     public function migrationOneTable($table)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (isset($this->change[$table])) {
             $query = "ALTER TABLE `$table` " . implode(" ,\n", $this->change[$table]) . " ";
             $this->displayMessage(sprintf(__('Change of the database layout - %s'), $table));
-            $DB->queryOrDie($query, $this->version . " multiple alter in $table");
+            $DB->doQueryOrDie($query, $this->version . " multiple alter in $table");
             unset($this->change[$table]);
         }
 
@@ -795,7 +806,7 @@ class Migration
             $this->displayMessage(sprintf(__('Adding fulltext indices - %s'), $table));
             foreach ($this->fulltexts[$table] as $idx) {
                 $query = "ALTER TABLE `$table` " . $idx;
-                $DB->queryOrDie($query, $this->version . " $idx");
+                $DB->doQueryOrDie($query, $this->version . " $idx");
             }
             unset($this->fulltexts[$table]);
         }
@@ -804,7 +815,7 @@ class Migration
             $this->displayMessage(sprintf(__('Adding unicity indices - %s'), $table));
             foreach ($this->uniques[$table] as $idx) {
                 $query = "ALTER TABLE `$table` " . $idx;
-                $DB->queryOrDie($query, $this->version . " $idx");
+                $DB->doQueryOrDie($query, $this->version . " $idx");
             }
             unset($this->uniques[$table]);
         }
@@ -818,10 +829,11 @@ class Migration
      **/
     public function executeMigration()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         foreach ($this->queries[self::PRE_QUERY] as $query) {
-            $DB->queryOrDie($query['query'], $query['message']);
+            $DB->doQueryOrDie($query['query'], $query['message']);
         }
         $this->queries[self::PRE_QUERY] = [];
 
@@ -835,7 +847,7 @@ class Migration
         }
 
         foreach ($this->queries[self::POST_QUERY] as $query) {
-            $DB->queryOrDie($query['query'], $query['message']);
+            $DB->doQueryOrDie($query['query'], $query['message']);
         }
         $this->queries[self::POST_QUERY] = [];
 
@@ -860,6 +872,7 @@ class Migration
      **/
     public function createRule(array $rule, array $criteria, array $actions)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // Avoid duplicate - Need to be improved using a rule uuid of other
@@ -869,19 +882,14 @@ class Migration
         $rule['comment']     = sprintf(__('Automatically generated by GLPI %s'), $this->version);
         $rule['description'] = '';
 
-       // Compute ranking
-        $sql = "SELECT MAX(`ranking`) AS `rank`
-              FROM `glpi_rules`
-              WHERE `sub_type` = '" . $rule['sub_type'] . "'";
-        $result = $DB->query($sql);
-
-        $ranking = 1;
-        if ($DB->numrows($result) > 0) {
-            $datas = $DB->fetchAssoc($result);
-            $ranking = $datas["rank"] + 1;
+        // Compute ranking
+        $ruleinst = new $rule['sub_type']();
+        $ranking = $ruleinst->getNextRanking();
+        if (!$ranking) {
+            $ranking = 1;
         }
 
-       // The rule itself
+        // The rule itself
         $values = ['ranking' => $ranking];
         foreach ($rule as $field => $value) {
             $values[$field] = $value;
@@ -889,7 +897,7 @@ class Migration
         $DB->insertOrDie('glpi_rules', $values);
         $rid = $DB->insertId();
 
-       // The rule criteria
+        // The rule criteria
         foreach ($criteria as $criterion) {
             $values = ['rules_id' => $rid];
             foreach ($criterion as $field => $value) {
@@ -898,7 +906,7 @@ class Migration
             $DB->insertOrDie('glpi_rulecriterias', $values);
         }
 
-       // The rule criteria actions
+        // The rule criteria actions
         foreach ($actions as $action) {
             $values = ['rules_id' => $rid];
             foreach ($action as $field => $value) {
@@ -918,84 +926,96 @@ class Migration
      *
      * @param array $toadd items to add : itemtype => array of values
      * @param array $todel items to del : itemtype => array of values
+     * @param bool $only_default : add the display pref only on global view
      *
      * @return void
      **/
-    public function updateDisplayPrefs($toadd = [], $todel = [])
+    public function updateDisplayPrefs($toadd = [], $todel = [], bool $only_default = false)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
-       //TRANS: %s is the table or item to migrate
+        //TRANS: %s is the table or item to migrate
         $this->displayMessage(sprintf(__('Data migration - %s'), 'glpi_displaypreferences'));
-        if (count($toadd)) {
-            foreach ($toadd as $type => $tab) {
-                $iterator = $DB->request([
-                    'SELECT'          => 'users_id',
-                    'DISTINCT'        => true,
-                    'FROM'            => 'glpi_displaypreferences',
-                    'WHERE'           => ['itemtype' => $type]
-                ]);
+        foreach ($toadd as $itemtype => $searchoptions_ids) {
+            $criteria = [
+                'SELECT'   => 'users_id',
+                'DISTINCT' => true,
+                'FROM'     => 'glpi_displaypreferences',
+                'WHERE'    => ['itemtype' => $itemtype]
+            ];
+            if ($only_default) {
+                $criteria['WHERE']['users_id'] = 0;
+            }
 
-                if (count($iterator) > 0) {
-                    foreach ($iterator as $data) {
-                        $query = "SELECT MAX(`rank`)
-                              FROM `glpi_displaypreferences`
-                              WHERE `users_id` = '" . $data['users_id'] . "'
-                                    AND `itemtype` = '$type'";
-                        $result = $DB->query($query);
-                        $rank   = $DB->result($result, 0, 0);
-                        $rank++;
+            $iterator = $DB->request($criteria);
 
-                        foreach ($tab as $newval) {
-                             $query = "SELECT *
-                                 FROM `glpi_displaypreferences`
-                                 WHERE `users_id` = '" . $data['users_id'] . "'
-                                       AND `num` = '$newval'
-                                       AND `itemtype` = '$type'";
-                            if ($result2 = $DB->query($query)) {
-                                if ($DB->numrows($result2) == 0) {
-                                       $DB->insert(
-                                           'glpi_displaypreferences',
-                                           [
-                                               'itemtype'  => $type,
-                                               'num'       => $newval,
-                                               'rank'      => $rank++,
-                                               'users_id'  => $data['users_id']
-                                           ]
-                                       );
-                                }
-                            }
-                        }
-                    }
-                } else { // Add for default user
-                    $rank = 1;
-                    foreach ($tab as $newval) {
-                        $DB->insert(
+            if (count($iterator) > 0) {
+                // There are already existing display preferences for this itemtype.
+                // Add new search options with an higher rank.
+                foreach ($iterator as $data) {
+                    $max_rank = $DB->request([
+                        'SELECT' => ['MAX' => 'rank AS max_rank'],
+                        'FROM'   => 'glpi_displaypreferences',
+                        'WHERE'  => [
+                            'users_id' => $data['users_id'],
+                            'itemtype' => $itemtype,
+                        ]
+                    ])->current()['max_rank'];
+
+                    $rank = $max_rank + 1;
+
+                    foreach ($searchoptions_ids as $searchoption_id) {
+                        $exists = countElementsInTable(
                             'glpi_displaypreferences',
                             [
-                                'itemtype'  => $type,
-                                'num'       => $newval,
-                                'rank'      => $rank++,
-                                'users_id'  => 0
+                                'users_id' => $data['users_id'],
+                                'itemtype' => $itemtype,
+                                'num'      => $searchoption_id,
                             ]
-                        );
+                        ) > 0;
+
+                        if (!$exists) {
+                            $DB->insert(
+                                'glpi_displaypreferences',
+                                [
+                                    'itemtype'  => $itemtype,
+                                    'num'       => $searchoption_id,
+                                    'rank'      => $rank++,
+                                    'users_id'  => $data['users_id']
+                                ]
+                            );
+                        }
                     }
+                }
+            } else {
+                // There are not yet any display preference for this itemtype.
+                // Add new search options with a rank starting to 1.
+                $rank = 1;
+                foreach ($searchoptions_ids as $searchoption_id) {
+                    $DB->insert(
+                        'glpi_displaypreferences',
+                        [
+                            'itemtype'  => $itemtype,
+                            'num'       => $searchoption_id,
+                            'rank'      => $rank++,
+                            'users_id'  => 0
+                        ]
+                    );
                 }
             }
         }
 
-        if (count($todel)) {
-           // delete display preferences
-            foreach ($todel as $type => $tab) {
-                if (count($tab)) {
-                    $DB->delete(
-                        'glpi_displaypreferences',
-                        [
-                            'itemtype'  => $type,
-                            'num'       => $tab
-                        ]
-                    );
-                }
+        // delete display preferences
+        foreach ($todel as $itemtype => $searchoptions_ids) {
+            if (count($searchoptions_ids) > 0) {
+                $DB->delete(
+                    'glpi_displaypreferences',
+                    [
+                        'itemtype'  => $itemtype,
+                        'num'       => $searchoptions_ids
+                    ]
+                );
             }
         }
     }
@@ -1005,7 +1025,7 @@ class Migration
      *
      * @param string $type    Either self::PRE_QUERY or self::POST_QUERY
      * @param string $query   Query to execute
-     * @param string $message Mesage to display on error, defaults to null
+     * @param string $message Message to display on error, defaults to null
      *
      * @return Migration
      */
@@ -1053,6 +1073,7 @@ class Migration
      */
     public function backupTables($tables)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $backup_tables = false;
@@ -1080,8 +1101,8 @@ class Migration
      *
      * @since 9.2
      *
-     * @param string|array $values  Value(s) to add
-     * @param string       $context Context to add on (optional)
+     * @param array  $values  Value(s) to add
+     * @param string $context Context to add on (optional)
      *
      * @return Migration
      */
@@ -1104,6 +1125,7 @@ class Migration
      */
     private function storeConfig()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         foreach ($this->configs as $context => $config) {
@@ -1147,6 +1169,7 @@ class Migration
      */
     public function addRight($name, $rights = ALLSTANDARDRIGHT, $requiredrights = ['config' => READ | UPDATE])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // Get all profiles where new rights has not been added yet
@@ -1221,6 +1244,70 @@ class Migration
     }
 
     /**
+     * Add specific right to profiles that match interface
+     *
+     * @param string  $name      Right name
+     * @param integer $right     Right to add
+     * @param string  $interface Interface to set (defaults to central)
+     *
+     * @return void
+     */
+    public function addRightByInterface($name, $right, $interface = 'central')
+    {
+        /** @var \DBmysql $DB */
+        global $DB;
+
+        $prof_iterator = $DB->request([
+            'SELECT'    => [
+                'glpi_profiles.id',
+                'glpi_profilerights.rights',
+            ],
+            'FROM'      => 'glpi_profiles',
+            'JOIN'      => [
+                'glpi_profilerights' => [
+                    'FKEY' => [
+                        'glpi_profilerights'      => 'profiles_id',
+                        'glpi_profiles'           => 'id',
+                        [
+                            'AND' => [
+                                'glpi_profilerights.name' => $name
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            'WHERE'     => [
+                'interface' => $interface,
+            ]
+        ]);
+
+        foreach ($prof_iterator as $profile) {
+            if (intval($profile['rights']) & $right) {
+                continue;
+            }
+            $DB->updateOrInsert(
+                'glpi_profilerights',
+                [
+                    'rights'       => $profile['rights'] | $right,
+                ],
+                [
+                    'profiles_id'  => $profile['id'],
+                    'name'         => $name
+                ],
+                sprintf('%1$s update right for %2$s', $this->version, $name)
+            );
+        }
+
+        $this->displayWarning(
+            sprintf(
+                'Rights has been updated for %1$s, you should review ACLs after update',
+                $name
+            ),
+            true
+        );
+    }
+
+    /**
      * Update right to profiles that match rights requirements
      *    Default is to update rights of profiles with READ and UPDATE rights on config
      *
@@ -1235,6 +1322,7 @@ class Migration
      */
     public function updateRight($name, $rights, $requiredrights = ['config' => READ | UPDATE])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // Get all profiles with required rights
@@ -1421,6 +1509,7 @@ class Migration
      */
     public function renameItemtype($old_itemtype, $new_itemtype, $update_structure = true)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if ($old_itemtype == $new_itemtype) {
@@ -1430,11 +1519,11 @@ class Migration
 
         $this->displayMessage(sprintf(__('Renaming "%s" itemtype to "%s"...'), $old_itemtype, $new_itemtype));
 
-        if ($update_structure) {
-            $old_table = getTableForItemType($old_itemtype);
-            $new_table = getTableForItemType($new_itemtype);
-            $old_fkey  = getForeignKeyFieldForItemType($old_itemtype);
-            $new_fkey  = getForeignKeyFieldForItemType($new_itemtype);
+        $old_table = getTableForItemType($old_itemtype);
+        $new_table = getTableForItemType($new_itemtype);
+        if ($old_table !== $new_table && $update_structure) {
+            $old_fkey  = getForeignKeyFieldForTable($old_table);
+            $new_fkey  = getForeignKeyFieldForTable($new_table);
 
            // Check prerequisites
             if (!$DB->tableExists($old_table)) {
@@ -1476,7 +1565,7 @@ class Migration
             foreach ($fkey_column_array as $fkey_column) {
                 $fkey_table   = $fkey_column['TABLE_NAME'];
                 $fkey_oldname = $fkey_column['COLUMN_NAME'];
-                $fkey_newname = preg_replace('/^' . preg_quote($old_fkey) . '/', $new_fkey, $fkey_oldname);
+                $fkey_newname = preg_replace('/^' . preg_quote($old_fkey, '/') . '/', $new_fkey, $fkey_oldname);
                 if ($DB->fieldExists($fkey_table, $fkey_newname)) {
                     throw new \RuntimeException(
                         sprintf(
@@ -1500,7 +1589,7 @@ class Migration
             foreach ($fkey_column_array as $fkey_column) {
                 $fkey_table   = $fkey_column['TABLE_NAME'];
                 $fkey_oldname = $fkey_column['COLUMN_NAME'];
-                $fkey_newname = preg_replace('/^' . preg_quote($old_fkey) . '/', $new_fkey, $fkey_oldname);
+                $fkey_newname = preg_replace('/^' . preg_quote($old_fkey, '/') . '/', $new_fkey, $fkey_oldname);
 
                 if ($fkey_table == $old_table) {
                   // Special case, foreign key is inside renamed table, use new name
@@ -1580,6 +1669,7 @@ class Migration
      */
     private function migrateSearchOptions()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (empty($this->search_opts)) {
@@ -1591,13 +1681,60 @@ class Migration
                 $old_search_opt = $p['old'];
                 $new_search_opt = $p['new'];
 
-               // Update display preferences
+                // Remove duplicates (a display preference exists for both old key and new key for a same user).
+                // Removes existing SO using new ID as they are probably corresponding to an ID that existed before and
+                // was not cleaned correctly.
+                $duplicates_iterator = $DB->request([
+                    'SELECT'     => ['new.id'],
+                    'FROM'       => DisplayPreference::getTable() . ' AS new',
+                    'INNER JOIN' => [
+                        DisplayPreference::getTable() . ' AS old' => [
+                            'ON' => [
+                                'new' => 'itemtype',
+                                'old' => 'itemtype',
+                                [
+                                    'AND' => [
+                                        'new.users_id' => new QueryExpression($DB->quoteName('old.users_id')),
+                                        'new.itemtype' => $itemtype,
+                                        'new.num'      => $new_search_opt,
+                                        'old.num'      => $old_search_opt,
+                                    ],
+                                ],
+                            ]
+                        ]
+                    ]
+                ]);
+                if ($duplicates_iterator->count() > 0) {
+                    $ids = array_column(iterator_to_array($duplicates_iterator), 'id');
+                    $DB->deleteOrDie(DisplayPreference::getTable(), ['id' => $ids]);
+                }
+
+                // Update display preferences
                 $DB->updateOrDie(DisplayPreference::getTable(), [
                     'num' => $new_search_opt
                 ], [
                     'itemtype' => $itemtype,
                     'num'      => $old_search_opt
                 ]);
+
+                // Update template fields
+                if (is_a($itemtype, 'CommonITILObject', true)) {
+                    $tables = [
+                        'glpi_' . strtolower($itemtype) . 'templatehiddenfields',
+                        'glpi_' . strtolower($itemtype) . 'templatemandatoryfields',
+                        'glpi_' . strtolower($itemtype) . 'templatepredefinedfields',
+                    ];
+                    foreach ($tables as $table) {
+                        if (!$DB->tableExists($table)) {
+                            continue;
+                        }
+                        $DB->updateOrDie($table, [
+                            'field' => $new_search_opt
+                        ], [
+                            'field' => $old_search_opt
+                        ]);
+                    }
+                }
             }
         }
 
@@ -1674,6 +1811,7 @@ class Migration
         string $class_1,
         string $class_2
     ) {
+        /** @var \DBmysql $DB */
         global $DB;
         if ($DB->tableExists($table)) {
             return;
@@ -1686,7 +1824,7 @@ class Migration
         $default_collation = DBConnection::getDefaultCollation();
         $default_key_sign = DBConnection::getDefaultPrimaryKeySignOption();
 
-        $DB->queryOrDie("
+        $DB->doQueryOrDie("
             CREATE TABLE `$table` (
                 `id` int {$default_key_sign} NOT NULL AUTO_INCREMENT,
                 `$fk_1` int {$default_key_sign} NOT NULL DEFAULT '0',

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -136,7 +136,7 @@ class Controller extends CommonGLPI
 
             try {
                 // copy files
-                $archive->extractFiles(GLPI_MARKETPLACE_DIR) !== false;
+                $archive->extract(GLPI_MARKETPLACE_DIR) !== false;
             } catch (\wapmorgan\UnifiedArchive\Exceptions\ArchiveExtractionException $e) {
                 $error = true;
             }
@@ -325,6 +325,7 @@ class Controller extends CommonGLPI
      */
     public static function cronCheckAllUpdates(CronTask $task = null): int
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $cron_status = 0;
@@ -405,7 +406,7 @@ class Controller extends CommonGLPI
     {
         $api_plugin = self::getAPI()->getPlugin($this->plugin_key);
 
-        if (!isset($api_plugin['required_offers'])) {
+        if (empty($api_plugin['required_offers'])) {
             return false;
         }
 

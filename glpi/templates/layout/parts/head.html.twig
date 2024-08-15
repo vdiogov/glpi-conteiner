@@ -5,7 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2022 Teclib' and contributors.
+ # @copyright 2015-2024 Teclib' and contributors.
  # @copyright 2003-2014 by the INDEPNET Development Team.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
@@ -32,7 +32,8 @@
  #}
 
 <!DOCTYPE html>
-<html lang="{{ lang }}" {% if high_contrast %}data-high-contrast="1"{% endif %}>
+<html lang="{{ lang }}" {% if high_contrast %}data-high-contrast="1"{% endif %}
+      {{ glpi_request_id is defined ? 'data-glpi-request-id=' ~ glpi_request_id : '' }}>
 <head>
    <title>{{ title }} - GLPI</title>
 
@@ -43,6 +44,14 @@
 
    {# auto desktop / mobile viewport #}
    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+   {# prevent robots to index GLPI instances #}
+   <meta name="robots" content="noindex, nofollow" />
+
+    {# Custom header tags for plugins #}
+    {% for header_tag in custom_header_tags %}
+        <{{ header_tag.tag }} {% for key, value in header_tag.properties %}{{ key }}="{{ value }}" {% endfor %}/>
+    {% endfor %}
 
    <meta property="glpi:csrf_token" content="{{ csrf_token(true) }}" />
 

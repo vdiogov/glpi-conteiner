@@ -1,95 +1,95 @@
-Here is a list of available drivers with their differences.
+- [Proposals for installation drivers](#proposals-for-installation-drivers)
+- [Drivers](#drivers)
+  - [PHP Extensions](#php-extensions)
+  - [Utilities + bridge](#utilities--bridge)
+  - [Pure PHP](#pure-php-implementation)
+- [Full support matrix](#full-support-matrix)
 
-|           Driver          | Zip       | Rar       | TarByPhar            | TarByPear                           | SevenZip                      | AlchemyZippy              | Gzip      | Bzip2     | Lzma2     | Iso     | Cab     |
-|:-------------------------:|-----------|-----------|----------------------|-------------------------------------|-------------------------------|---------------------------|-----------|-----------|-----------|---------|---------|
-|          formats          | zip       | rar       | tar, tar-gz, tar-bz2 | tar, tar-gz, tar-bz2, tar-Z, tar-xz | 7z, zip, rar, tar, iso,  ...  | zip, tar, tar-gz, tar-bz2 | gz        | bz2       | xz        | iso     | cab     |
-|            type           | **extension** | **extension** | **extensions**       | _library_ + **extensions**            | **library + OS utility**          | **library + OS utilities**    | **extension** | **extension** | **extension** | **library** | **library** |
-| Open with password        | ✔         | ✔         |                      |                                     | ✔                             |                           |           |           |           |         |         |
-| Get comment               | ✔         | ✔         |                      |                                     |                               |                           |           |           |           |         |         |
-| Update comment            | ✔         |           |                      |                                     |                               |                           |           |           |           |         |         |
-|        Stream files       | ✔         | ✔         |                      |                                     |                               |                           | ✔         | ✔         | ✔         |         |         |
-|         Add files         | ✔         |           | ✔                    | ✔                                   | ✔                             | ✔                         |           |           |           |         |         |
-|        Delete files       | ✔         |           | ✔                    |                                     | ✔                             | ✔                         |           |           |           |         |         |
-|           Create          | ✔         |           | ✔                    | ✔                                   | ✔                             | ✔                         | ✔         | ✔         | ✔         |         |         |
-| Specify compression level | ✔         |           |                      |                                     | ✔                             |                           | ✔         | ✔         |           |         |         |
-| Encrypt with password     | ✔         |           |                      |                                     | ✔                             |                           |           |           |           |         |         |
-
-Example for `zip` with two drivers support: If on your system both `Zip` and `AlchemyZippy` driver available, the first will be used for `zip` file.
+| Type | Pros | Cons                                                                                               | Useful for                                                              |
+|------|------|----------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
+| PHP Exteniosn | Fast, supports a lot of functions | Sometimes can not support specific functions (e.g. password-protection in zip on old php versions) | Use it when possible (when extensions installed)                        |
+| Utilities + bridge | Uses system utilities, so should be fast (and even faster PHP Extensions) | Do not support streaming                                                                           | Packing a lot of files / Unpacking the whole archives without streaming |
+| Pure PHP | Works without PHP Extensions or system utilities, can be installed via composer only | Uses a lot of memory, lack of speed                                                                | Fallback method                                                         |
 
 # Proposals for installation drivers
-## In docker/VDS case
-Install extensions (`zip, rar, phar, zlib, bzip2`), program (`p7zip`) and SevenZip driver.
+- **In common case:**
+  - install `TarByPear`, `NelexaZip`
+  - If installed `7za` utility - configure `SevenZip` driver
+  - Else if installed `tar` or `unzip` utilities - configure `AlchemyZippy` driver
+- **In docker/on VDS:**
+  - install all php extensions (`zip, rar, phar, zlib, bz2`)
+  - install utility (`7za` - `p7zip-full` on ubuntu) and `SevenZip` driver
 
-## In common hosting case
-Install TarByPear, AlchemyZippy libraries.
+# Drivers
+## PHP extensions
 
-# Details about drivers
-## Zip
-- Type: php-extension (`zip`)
-- Formats: zip
-- All functions available
-- Can open and create archives with passwords.
+| Driver | Formats                   | php extension | notes                                                                                                                                                                                                        |
+|--------|---------------------------|---------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Zip | zip, jar                  | `zip`         | supports password-protection since 7.2.0                                                                                                                                                                     |
+| Rar | rar                       | `rar` | read-only mode                                                                                                                                                                                               |
+| TarByPhar | zip, tar, tar.gz, tar.bz2 | `phar` | Has a bug [#71966](https://bugs.php.net/bug.php?id=71966&thanks=10) in `ext-phar` ([related issue](https://github.com/wapmorgan/UnifiedArchive/issues/12)) - an archive will `./` in paths cannot be opened. |
 
-## Rar
-- Type: php-extension (`rar`)
-- Formats: rar
-- The read-only mode (not available: creation, appending, updating).
-- Can open archives with passwords.
+### PHP extensions for compression only
 
-## TarByPhar
-- Type: php-extension (`phar`) and optionally php-extensions (`zlib`, `bzip2`)
-- Formats: tar, tar.gz, tar.bz2
-- Has a bug [#71966](https://bugs.php.net/bug.php?id=71966&thanks=10) in `ext-phar` ([related issue](https://github.com/wapmorgan/UnifiedArchive/issues/12)) - an archive will `./` in paths cannot be opened.
+These drivers support only compressed (not archived) data.  They support opening, extracting&streaming and creation.
 
-## TarByPear
-- Type: library ([`pear/archive_tar`](https://packagist.org/packages/pear/archive_tar)) and optionally php-extensions (`zlib`, `bzip2`, `xz` - [5.x](https://github.com/payden/php-xz) / [7.x](https://github.com/codemasher/php-ext-xz))
-- Formats: tar, tar.gz, tar.bz2, tar.xz, tar.Z
-- Works with binary data in php-land (= eats a lot of memory for big archives).
-- Not available: updating archive (deleteFiles).
+| Driver | Formats | PHP extension                                                                                    |
+|--------|---------|--------------------------------------------------------------------------------------------------|
+| Bzip   | .bz2    | `bzip2`                                                                                          |
+| Gzip   | .gz     | `zlib`                                                                                           |
+| Lzma   | .xz     | `xz` - [5.x](https://github.com/payden/php-xz) / [7.x](https://github.com/codemasher/php-ext-xz) |
 
-## SevenZip
-- Type: library ([`gemorroj/archive7z`](https://packagist.org/packages/gemorroj/archive7z)) and console program p7zip ([`7z`](http://p7zip.sourceforge.net/))
-- Formats: 7z, XZ, BZIP2, GZIP, TAR, ZIP, WIM, AR, ARJ, CAB, CHM, CPIO, CramFS, DMG, EXT, FAT, GPT, HFS, IHEX, ISO, LZH, LZMA, MBR, MSI, NSIS, NTFS, QCOW2, RAR, RPM, SquashFS, UDF, UEFI, VDI, VHD, VMDK, WIM, XAR and Z
-- Works via command line (= should be available `proc_*` functions).
-- Can open and create archives with passwords (only ZIP format).
-- Can adjust new archives compression level.
+## Utilities + bridge
 
-## AlchemyZippy
-- Type: library ([`alchemy/zippy`](https://packagist.org/packages/alchemy/zippy)) and console programs:
-    - `tar`
-    - `zip`
-- Formats: zip, tar, tar.bz2, tar.gz
-- Works via command line (= should be available `proc_*` functions).
-- All functions
+| Driver | Formats                                                                                                                                                                                                    | utility + bridge                                                                                                           |
+|--------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| SevenZip | 7z, xz, bzip2, gzip, tar, zip, wim, ar, arj, cab, chm, cpio, cramfs, dmg, ext, fat, gpt, hfs, ihex, iso, lzh, lzma, mbr, msi, nsis, ntfs, qcow2, rar, rpm, squashfs, udf, uefi, vdi, vhd, vmdk, wim, xar, z | p7zip ([`7za`](http://p7zip.sourceforge.net/)) + [`gemorroj/archive7z`](https://packagist.org/packages/gemorroj/archive7z) |
+| AlchemyZippy | zip, tar, tar.gz, tar.bz2                                                                                                                                                                                  | `zip`/`tar` + [`alchemy/zippy`](https://packagist.org/packages/alchemy/zippy)                                              |
 
-**If you install SevenZip and AlchemyZippy**:
+**If you install SevenZip and AlchemyZippy at the same time**:
 1. You should specify symfony/console version before installation to any **3.x.x version**: `composer require symfony/process:~3.4`, because they require different `symfony/process` versions.
 2. Install archive7z version 4.0.0: `composer require gemorroj/archive7z:~4.0`
 
-## Cab
-- Type: library ([`wapmorgan/cab-archive`](https://packagist.org/packages/wapmorgan/cab-archive))
-- Formats: cab
-- Works with binary data in php-land (= eats a lot of memory for big archives).
-- Getting files content and extraction is supported only on PHP 7.0.22+, 7.1.8+, 7.2.0.
-- The read-only mode (not available: creation, appending, updating).
+## Pure php implementation
 
-## Iso
-- Type: library ([`phpclasses/php-iso-file`](https://packagist.org/packages/phpclasses/php-iso-file))
-- Formats: iso
-- Works with binary data in php-land (= eats a lot of memory for big archives).
-- The read-only mode (not available: creation, appending, updating).
+Works with binary data in php-land (= eats a lot of memory for big archives).
 
-## One-file formats
-These drivers support only compressed (not archived) data.
+| Driver | Formats                             | library                                                                                                                                                                                                                     | notes                                                                                                                   |
+|--------|-------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| NelexaZip | zip                                 | [`nelexa/zip`](https://packagist.org/packages/nelexa/zip) and optionally php-extensions (`bz2`, `fileinfo`, `iconv`, `openssl`) |                                                                              |
+| TarByPear | tar, tar.gz, tar.bz2, tar.xz, tar.Z | [`pear/archive_tar`](https://packagist.org/packages/pear/archive_tar) and optionally php-extensions (`zlib`, `bzip2`, `xz` - [5.x](https://github.com/payden/php-xz) / [7.x](https://github.com/codemasher/php-ext-xz)      | dont support updating archive (deleteFiles)                                                                             |
+| Cab    | cab                                 | [`wapmorgan/cab-archive`](https://packagist.org/packages/wapmorgan/cab-archive)                                                                                                                                             | Getting files content and extraction is supported only on PHP 7.0.22+, 7.1.8+, 7.2.0. Support only opening & extraction |
+| Iso    | iso                                 | [`phpclasses/php-iso-file`](https://packagist.org/packages/phpclasses/php-iso-file)                                                                                                                                         | Support only opening & extraction                                                                                       |
 
-### Bzip2
-- Type: php-extension (`bzip2`)
-- Formats: bz2
+# Full support matrix
 
-### Gzip
-- Type: php-extension (`zlib`)
-- Formats: gz
+Result of `./vendor/bin/cam system:formats` when all drivers installed and configured (except of AlchemyZippy):
+```
++-----------------+------------+------+------+------+-------+--------+--------+--------+-----------+-----+-----+-----+------+-----+-----+-----+-----+-----+-----+-----+------+-------+
+| driver / format | zip        | rar  | gz   | bz2  | xz    | tar    | tgz    | tbz2   | 7z        | cab | iso | arj | uefi | gpt | mbr | msi | dmg | rpm | deb | udf | txz  | tar.z |
++-----------------+------------+------+------+------+-------+--------+--------+--------+-----------+-----+-----+-----+------+-----+-----+-----+-----+-----+-----+-----+------+-------+
+| Zip             | oOtxsadTcC |      |      |      |       |        |        |        |           |     |     |     |      |     |     |     |     |     |     |     |      |       |
+| Rar             |            | oOxs |      |      |       |        |        |        |           |     |     |     |      |     |     |     |     |     |     |     |      |       |
+| Gzip            |            |      | oxsc |      |       |        |        |        |           |     |     |     |      |     |     |     |     |     |     |     |      |       |
+| Bzip            |            |      |      | oxsc |       |        |        |        |           |     |     |     |      |     |     |     |     |     |     |     |      |       |
+| Lzma            |            |      |      |      | oxsc  |        |        |        |           |     |     |     |      |     |     |     |     |     |     |     |      |       |
+| TarByPhar       | oxsadc     |      |      |      |       | oxsadc | oxsadc | oxsadc |           |     |     |     |      |     |     |     |     |     |     |     |      |       |
+| SevenZip        | oOxadcC    |      |      |      | oxadc | oxadc  |        |        | oOtxadTcC | ox  | ox  | ox  | ox   | ox  | ox  | ox  | ox  | ox  | ox  | ox  |      |       |
+| AlchemyZippy    |            |      |      |      |       |        |        |        |           |     |     |     |      |     |     |     |     |     |     |     |      |       |
+| NelexaZip       | oOxad      |      |      |      |       |        |        |        |           |     |     |     |      |     |     |     |     |     |     |     |      |       |
+| TarByPear       |            |      |      |      |       | oxac   | oxac   | oxac   |           |     |     |     |      |     |     |     |     |     |     |     | oxac |       |
+| Iso             |            |      |      |      |       |        |        |        |           |     | ox  |     |      |     |     |     |     |     |     |     |      |       |
+| Cab             |            |      |      |      |       |        |        |        |           | ox  |     |     |      |     |     |     |     |     |     |     |      |       |
++-----------------+------------+------+------+------+-------+--------+--------+--------+-----------+-----+-----+-----+------+-----+-----+-----+-----+-----+-----+-----+------+-------+
+```
 
-### Lzma2
-- Type: php-extension (`xz` - [5.x](https://github.com/payden/php-xz) / [7.x](https://github.com/codemasher/php-ext-xz))
-- Formats: xz
+- o - open
+- O - open (+password)
+- t - get comment
+- x - extract
+- s - stream
+- a - append
+- d - delete
+- T - set comment
+- c - create
+- C - create (+password)

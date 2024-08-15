@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -39,8 +39,12 @@
 
 use Glpi\Event;
 
+/** @var array $CFG_GLPI */
+global $CFG_GLPI;
+
 include('../inc/includes.php');
 
+Session::checkRight("networking", READ);
 
 $np  = new NetworkPort();
 $nn  = new NetworkPort_NetworkPort();
@@ -117,6 +121,22 @@ if (isset($_POST["add"])) {
         Html::redirect($item->getFormURLWithID($np->fields['items_id']));
     }
     Html::redirect($CFG_GLPI["root_doc"] . "/front/central.php");
+} else if (isset($_POST["delete"])) {
+    $np->check($_POST['id'], DELETE);
+    $np->delete($_POST, 0);
+    Event::log(
+        $_POST['id'],
+        "networkport",
+        5,
+        "inventory",
+        //TRANS: %s is the user login
+        sprintf(__('%s deletes an item'), $_SESSION["glpiname"])
+    );
+
+    if ($item = getItemForItemtype($np->fields['itemtype'])) {
+        Html::redirect($item->getFormURLWithID($np->fields['items_id']));
+    }
+    Html::redirect($CFG_GLPI["root_doc"] . "/front/central.php");
 } else if (isset($_POST["update"])) {
     $np->check($_POST['id'], UPDATE);
 
@@ -135,6 +155,20 @@ if (isset($_POST["add"])) {
 
     if (isset($_POST["id"])) {
         $nn->delete($_POST);
+    }
+    Html::back();
+} else if (isset($_POST["restore"])) {
+    $np->check($_POST["id"], DELETE);
+
+    if ($np->restore($_POST)) {
+        Event::log(
+            $_POST["id"],
+            "networkport",
+            4,
+            "inventory",
+            //TRANS: %s is the user login
+            sprintf(__('%s restores an item'), $_SESSION["glpiname"])
+        );
     }
     Html::back();
 } else {

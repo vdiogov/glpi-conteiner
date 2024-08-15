@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -84,6 +84,10 @@ class PlanningExternalEventTemplate extends CommonDropdown
                 'name'  => 'text',
                 'label' => __('Description'),
                 'type'  => 'tinymce',
+                // Images should remains in base64 in templates.
+                // When an element will be created from a template, tinymce will catch the base64 image and trigger the
+                // document upload process.
+                'convert_images_to_documents' => false,
             ]
         ];
     }

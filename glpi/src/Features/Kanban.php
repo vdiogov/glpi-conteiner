@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -37,7 +37,6 @@ namespace Glpi\Features;
 
 use Glpi\Http\Response;
 use Glpi\Plugin\Hooks;
-use Plugin;
 
 /**
  * Trait Kanban.
@@ -147,6 +146,7 @@ trait Kanban
 
     public static function getKanbanPluginFilters($itemtype)
     {
+        /** @var array $PLUGIN_HOOKS */
         global $PLUGIN_HOOKS;
         $filters = [];
 

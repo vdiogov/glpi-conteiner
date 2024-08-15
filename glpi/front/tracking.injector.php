@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -32,6 +32,14 @@
  *
  * ---------------------------------------------------------------------
  */
+
+/**
+ * @var array $CFG_GLPI
+ * @var array $_UPOST
+ */
+global $CFG_GLPI, $_UPOST;
+
+$SECURITY_STRATEGY = 'no_check'; // Anonymous access may be allowed by configuration.
 
 include('../inc/includes.php');
 
@@ -78,7 +86,7 @@ if (isset($_POST['add'])) {
         unset($_POST['_actors']['requester'], $_POST['_actors']['assign']);
     }
     if ($track->add($_POST)) {
-        if ($_SESSION['glpibackcreated']) {
+        if ($_SESSION['glpibackcreated'] && Ticket::canView()) {
             Html::redirect($track->getLinkURL());
         }
         if (isset($_POST["_type"]) && ($_POST["_type"] == "Helpdesk")) {
@@ -94,7 +102,11 @@ if (isset($_POST['add'])) {
             echo "</div>";
         }
     } else {
-        Html::back();
+        if (isset($_POST["_type"]) && ($_POST["_type"] == "Helpdesk")) {
+            Html::redirect($CFG_GLPI["root_doc"] . "/front/helpdesk.php");
+        } else {
+            Html::redirect($CFG_GLPI["root_doc"] . "/front/helpdesk.public.php?create_ticket=1");
+        }
     }
     Html::nullFooter();
 } else { // reload display form

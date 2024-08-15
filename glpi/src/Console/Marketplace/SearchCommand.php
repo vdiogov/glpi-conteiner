@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -50,8 +50,7 @@ class SearchCommand extends AbstractCommand
     {
         parent::configure();
 
-        $this->setName('glpi:marketplace:search');
-        $this->setAliases(['marketplace:search']);
+        $this->setName('marketplace:search');
         $this->setDescription(__('Search GLPI marketplace'));
 
         $this->addArgument('term', InputArgument::OPTIONAL, __('The search term'));
@@ -59,6 +58,7 @@ class SearchCommand extends AbstractCommand
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!GLPINetwork::isRegistered()) {

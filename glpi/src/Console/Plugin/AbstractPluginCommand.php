@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -88,12 +88,13 @@ abstract class AbstractPluginCommand extends AbstractCommand implements ForceNoP
         } else if (empty($directories)) {
            // Ask for plugin list if directory argument is empty
             $choices = $this->getDirectoryChoiceChoices();
-            $choices = array_merge(
-                [self::DIRECTORY_ALL => __('All plugins')],
-                $choices
-            );
 
             if (!empty($choices)) {
+                $choices = array_merge(
+                    [self::DIRECTORY_ALL => __('All plugins')],
+                    $choices
+                );
+
                 /** @var \Symfony\Component\Console\Helper\QuestionHelper $question_helper */
                 $question_helper = $this->getHelper('question');
                 $question = new ChoiceQuestion(

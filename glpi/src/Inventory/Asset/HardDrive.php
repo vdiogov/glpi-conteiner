@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -40,11 +40,6 @@ use Glpi\Inventory\Conf;
 
 class HardDrive extends Device
 {
-    public function __construct(CommonDBTM $item, array $data = null)
-    {
-        parent::__construct($item, $data, 'Item_DeviceHardDrive');
-    }
-
     public function prepare(): array
     {
         $mapping = [
@@ -65,6 +60,10 @@ class HardDrive extends Device
                 $val->designation = $val->name;
             }
 
+            if (!isset($val->capacity) || $val->capacity == '') {
+                $val->capacity = 0;
+            }
+
             $val->is_dynamic = 1;
         }
 
@@ -74,5 +73,10 @@ class HardDrive extends Device
     public function checkConf(Conf $conf): bool
     {
         return $conf->component_harddrive == 1;
+    }
+
+    public function getItemtype(): string
+    {
+        return \Item_DeviceHardDrive::class;
     }
 }

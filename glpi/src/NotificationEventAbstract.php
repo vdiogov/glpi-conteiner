@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -60,6 +60,10 @@ abstract class NotificationEventAbstract implements NotificationEventInterface
         $notify_me,
         $emitter = null
     ) {
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
         global $CFG_GLPI, $DB;
         if ($CFG_GLPI['notifications_' . $options['mode']]) {
             $entity = $notificationtarget->getEntity();
@@ -69,7 +73,6 @@ abstract class NotificationEventAbstract implements NotificationEventInterface
             } else { // Compat with GLPI < 9.4.2 TODO: remove in 9.5
                 $processed = [];
             }
-            $notprocessed = [];
 
             $targets = getAllDataFromTable(
                 'glpi_notificationtargets',
@@ -102,19 +105,15 @@ abstract class NotificationEventAbstract implements NotificationEventInterface
                     ) {
                         //If the user have not yet been notified
                         if (!isset($processed[$users_infos['language']][$key])) {
-                      //If ther user's language is the same as the template's one
-                            if (
-                                isset($notprocessed[$users_infos['language']]
-                                                  [$key])
-                            ) {
-                                  unset($notprocessed[$users_infos['language']]
-                                                   [$key]);
-                            }
+                            //If ther user's language is the same as the template's one
                             $options['item'] = $item;
 
-                      // set timezone from user
-                      // as we work on a copy of the item object, no reload is required after
-                            if (isset($users_infos['additionnaloption']['timezone'])) {
+                            // set timezone from user
+                            // as we work on a copy of the item object, no reload is required after
+                            if (
+                                isset($users_infos['additionnaloption']['timezone'])
+                                && is_a($options['item'], CommonDBTM::class, true) // item may be a `CommonGLPI`
+                            ) {
                                  $DB->setTimezone($users_infos['additionnaloption']['timezone']);
                                  // reload object for get timezone correct dates
                                  $options['item']->getFromDB($item->fields['id']);
@@ -146,6 +145,7 @@ abstract class NotificationEventAbstract implements NotificationEventInterface
                                         : 0;
                                     $send_data['_entities_id']              = $entity;
                                     $send_data['mode']                      = $data['mode'];
+                                    $send_data['event']                     = $event;
 
                                     Notification::send($send_data);
                                 } else {
@@ -163,9 +163,6 @@ abstract class NotificationEventAbstract implements NotificationEventInterface
                                 }
                                 $processed[$users_infos['language']][$key]
                                                                   = $users_infos;
-                            } else {
-                                $notprocessed[$users_infos['language']][$key]
-                                                               = $users_infos;
                             }
                         }
                     }
@@ -173,7 +170,6 @@ abstract class NotificationEventAbstract implements NotificationEventInterface
             }
 
             unset($processed);
-            unset($notprocessed);
         }
     }
 

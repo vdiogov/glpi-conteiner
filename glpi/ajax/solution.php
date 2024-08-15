@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -100,6 +100,36 @@ if ($apply_twig) {
         );
     }
     $template->fields['content'] = RichText::getSafeHtml($content);
+}
+
+//load solutiontype name (use to create OPTION dom)
+//need when template is used and when GLPI preselcted type if defined
+
+$template->fields['solutiontypes_name'] = "";
+if ($template->fields['solutiontypes_id']) {
+    $entityRestrict = getEntitiesRestrictCriteria(
+        getTableForItemType(SolutionType::getType()),
+        "",
+        $parent->fields['entities_id'] ?? 0,
+        true
+    );
+
+    $solutiontype = new SolutionType();
+    if (
+        $solutiontype->getFromDBByCrit([
+            "id" => $template->fields['solutiontypes_id'],
+        ] + $entityRestrict)
+    ) {
+        $template->fields['solutiontypes_name'] = Dropdown::getDropdownName(
+            getTableForItemType(SolutionType::getType()),
+            $template->fields['solutiontypes_id'],
+            0,
+            true,
+            false,
+            //default value like "(id)" is the default behavior of GLPI when field 'name' is empty
+            "(" . $template->fields['solutiontypes_id'] . ")"
+        );
+    }
 }
 
 // Return json response with the template fields

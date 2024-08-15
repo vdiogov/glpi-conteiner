@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -87,14 +87,7 @@ var handleUploadedFile = function (files, files_data, input_name, container, edi
                                 ? editor.dom.select('img[data-upload_id="' + uploaded_image.upload_id + '"]')
                                 : [];
                             if (matching_image.length > 0) {
-                                editor.dom.setAttribs(
-                                    matching_image,
-                                    {
-                                        id: tag_data.tag.replace(/#/g, ''),
-                                        // Ensure URL is a blob, to not pollute DOM with base64 data URL
-                                        src: URL.createObjectURL(file),
-                                    }
-                                );
+                                editor.dom.setAttrib(matching_image, 'id', tag_data.tag.replace(/#/g, ''));
                             } else if(Object.prototype.hasOwnProperty.call(insertIntoEditor, file.name) && insertIntoEditor[file.name]) {
                                 // Legacy behaviour
                                 // FIXME deprecate this in GLPI 10.1.
@@ -137,8 +130,8 @@ var handleUploadedFile = function (files, files_data, input_name, container, edi
  * @param      {String}  input_name    Name of generated input hidden (default filename)
  * @param      {Object}  container     The fileinfo container
  */
-var fileindex = 0;
 var displayUploadedFile = function(file, tag, editor, input_name, filecontainer) {
+    var fileindex = $('input[name^="_'+input_name+'["]').length;
     var ext = file.name.split('.').pop();
 
     var p = $('<p></p>')
@@ -176,8 +169,6 @@ var displayUploadedFile = function(file, tag, editor, input_name, filecontainer)
     $('<span class="ti ti-circle-x pointer"></span>').click(function() {
         deleteImagePasted(elementsIdToRemove, tag.tag, editor);
     }).appendTo(p);
-
-    fileindex++;
 };
 
 /**
@@ -347,19 +338,77 @@ var insertImageInTinyMCE = function(editor, image) {
 };
 
 /**
+ * Set given rich text editor content.
+ */
+const setRichTextEditorContent = function(editor_id, content) {
+    if (typeof tinyMCE === 'undefined') {
+        return;
+    }
+    const editor = tinyMCE.get(editor_id);
+    if (editor) {
+        editor.setContent('');
+        // use paste command to force images registering
+        editor.execCommand('mceInsertClipboardContent', false, {
+            html: content,
+            internal: true, // disable some filterings operations that would remove styles (maybe a bug)
+        });
+        // force trigger of event handlers that will save editor contents
+        // and remove "required" state
+        editor.fire('keyup');
+    }
+};
+
+/**
  * Plugin for tinyMce editor who intercept paste event
  * to check if a file upload can be proceeded
  * @param  {[Object]} editor TinyMCE editor
  */
 if (typeof tinyMCE != 'undefined') {
     tinyMCE.PluginManager.add('glpi_upload_doc', function(editor) {
+        let last_paste_content = null;
+        const rtf_img_types = {
+            'pngblip': 'image/png',
+            'jpegblip': 'image/jpeg',
+        };
+        editor.on('paste', (e) => {
+            last_paste_content = e.clipboardData;
+        });
         editor.on('PastePreProcess', function(event) {
+            const base64_img_contents = [];
+            if (last_paste_content !== null && last_paste_content.types.includes('text/rtf')) {
+                // Extract all RTF images and remove line breaks
+                const rtf_content = last_paste_content.getData('text/rtf');
+                const rtf_content_no_line_break = rtf_content.replace(/(\r\n|\n|\r)/gm, "");
+                const hex_binary = rtf_content_no_line_break.matchAll(/\\(pngblip|jpegblip)([a-z0-9]*)}/g);
+
+                // For each match, convert to base64
+                for (const match of hex_binary) {
+                    const img_type = match[1];
+                    const hex = match[2];
+                    const hexToBase64 = function(hexstring) {
+                        return btoa(hexstring.match(/\w{2}/g).map(function(a) {
+                            return String.fromCharCode(parseInt(a, 16));
+                        }).join(""));
+                    };
+                    base64_img_contents.push({
+                        type: rtf_img_types[img_type],
+                        content: hexToBase64(hex)
+                    });
+                }
+            }
             // Trigger upload process for each pasted image
             var fragment = $('<div></div>');
             fragment.append(event.content);
             fragment.find('img').each(function() {
                 const image = $(this);
-                const src = image.attr('src');
+                let src = image.attr('src');
+                const file_pattern = '^file://';
+
+                if (src.match(file_pattern) !== null && base64_img_contents.length > 0) {
+                    const rtf_content = base64_img_contents.shift();
+                    src = `data:${rtf_content['type']};base64,` + rtf_content['content'];
+                    image.attr('src', src);
+                }
                 if (src.match(new RegExp('^(data|blob):')) !== null) {
                     const upload_id = Math.random().toString();
                     image.attr('data-upload_id', upload_id);

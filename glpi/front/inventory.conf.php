@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -43,12 +43,9 @@ Html::header(__('Inventory'), $_SERVER['PHP_SELF'], "admin", "glpi\inventory\inv
 
 $conf = new Conf();
 
-if (isset($_FILES['inventory_file']) && $_FILES['inventory_file']['tmp_name'] != '') {
-    $conf->importFile($_FILES);
-    Html::back();
-}
-
-if (isset($_POST['update'])) {
+if (isset($_FILES['inventory_files'])) {
+    $conf->displayImportFiles($_FILES);
+} elseif (isset($_POST['update'])) {
     unset($_POST['update']);
     $conf->saveConf($_POST);
     Session::addMessageAfterRedirect(
@@ -57,8 +54,8 @@ if (isset($_POST['update'])) {
         INFO
     );
     Html::back();
+} else {
+    $conf->display(['id' => 1]);
 }
-
-$conf->display(['id' => 1]);
 
 Html::footer();

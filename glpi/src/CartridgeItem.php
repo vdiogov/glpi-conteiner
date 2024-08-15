@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -155,6 +155,7 @@ class CartridgeItem extends CommonDBTM
      **/
     public static function getCount($id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $result = $DB->request([
@@ -169,13 +170,14 @@ class CartridgeItem extends CommonDBTM
     /**
      * Add a compatible printer type for a cartridge type
      *
-     * @param $cartridgeitems_id  integer: cartridge type identifier
-     * @param printermodels_id    integer: printer type identifier
+     * @param integer $cartridgeitems_id cartridge type identifier
+     * @param integer $printermodels_id  printer type identifier
      *
      * @return boolean : true for success
      **/
     public function addCompatibleType($cartridgeitems_id, $printermodels_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (
@@ -301,7 +303,7 @@ class CartridgeItem extends CommonDBTM
             'table'              => 'glpi_users',
             'field'              => 'name',
             'linkfield'          => 'users_id_tech',
-            'name'               => __('Technician in charge of the hardware'),
+            'name'               => __('Technician in charge'),
             'datatype'           => 'dropdown',
             'right'              => 'own_ticket'
         ];
@@ -311,7 +313,7 @@ class CartridgeItem extends CommonDBTM
             'table'              => 'glpi_groups',
             'field'              => 'completename',
             'linkfield'          => 'groups_id_tech',
-            'name'               => __('Group in charge of the hardware'),
+            'name'               => __('Group in charge'),
             'condition'          => ['is_assign' => 1],
             'datatype'           => 'dropdown'
         ];
@@ -383,7 +385,11 @@ class CartridgeItem extends CommonDBTM
      **/
     public static function cronCartridge($task = null)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $cron_status = 1;
         if ($CFG_GLPI["use_notifications"]) {
@@ -507,6 +513,7 @@ class CartridgeItem extends CommonDBTM
      **/
     public static function dropdownForPrinter(Printer $printer)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([

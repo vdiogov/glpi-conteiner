@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,11 +36,11 @@
         display: none;
     }
 
-    @include media-breakpoint-down(sm) {
+    @include media-breakpoint-down(lg) {
         margin-bottom: 55px; // .itil-footer height
     }
 
-    @include media-breakpoint-up(sm) {
+    @include media-breakpoint-up(lg) {
         height: calc(100vh - 187px);
 
         .itil-left-side,
@@ -107,7 +107,7 @@
 }
 
 #itil-object-container {
-    @include media-breakpoint-up(sm) {
+    @include media-breakpoint-up(lg) {
         &.right-expanded {
             .itil-footer {
                 .collapse-panel {
@@ -164,7 +164,7 @@
 
 .horizontal-layout {
     .itil-object {
-        @include media-breakpoint-up(sm) {
+        @include media-breakpoint-up(lg) {
             height: calc(100vh - 257px);
         }
     }

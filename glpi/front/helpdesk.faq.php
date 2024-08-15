@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,14 +33,17 @@
  * ---------------------------------------------------------------------
  */
 
+/** @var array $CFG_GLPI */
+global $CFG_GLPI;
+
+$SECURITY_STRATEGY = 'faq_access';
+
 include('../inc/includes.php');
 
 // Redirect management
 if (isset($_GET["redirect"])) {
     Toolbox::manageRedirect($_GET["redirect"]);
 }
-
-Session::checkFaqAccess();
 
 if (Session::getLoginUserID()) {
     Html::helpHeader(__('FAQ'), 'faq');

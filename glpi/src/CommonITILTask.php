@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -43,6 +43,7 @@ use Sabre\VObject\Component\VCalendar;
 /// TODO extends it from CommonDBChild
 abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItemInterface
 {
+    use Glpi\Features\ParentStatus;
     use Glpi\Features\PlanningEvent;
     use VobjectConverterTrait;
 
@@ -68,6 +69,10 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
         return 'id';
     }
 
+    public static function getIcon()
+    {
+        return 'ti ti-checkbox';
+    }
 
     public function canViewPrivates()
     {
@@ -86,7 +91,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
      *
      * @since 0.84
      *
-     * @return object of the concerned item or false on error
+     * @return false|CommonDBTM object of the concerned item or false on error
      **/
     public function getItem()
     {
@@ -163,7 +168,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
 
         switch ($field) {
             case 'state':
-                return Planning::getState($values[$field]);
+                return Planning::getStatusIcon($values[$field]);
         }
         return parent::getSpecificValueToDisplay($field, $values, $options);
     }
@@ -197,7 +202,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
 
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
-
+        /** @var CommonDBTM $item */
         if (
             ($item->getType() == $this->getItilObjectItemType())
             && $this->canView()
@@ -225,6 +230,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
 
     public function post_deleteFromDB()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $itemtype = $this->getItilObjectItemType();
@@ -257,6 +263,29 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
                 'task_groups_id_tech' => $this->fields['groups_id_tech']
             ];
             NotificationEvent::raiseEvent('delete_task', $item, $options);
+        }
+    }
+
+    /**
+     * Handle the task duration and planned duration logic.
+     *
+     * This function ensures a bi-directional link between the task duration and the planned duration.
+     * These two fields can be a bit redundant when task planning is enabled.
+     *
+     * @param array $input The input array, passed by reference.
+     * @param int $timestart The start time of the task.
+     * @param int $timeend The end time of the task.
+     * @return void
+     */
+    private function handleTaskDuration(array &$input, int $timestart, int $timeend): void
+    {
+        // If 'actiontime' is set and different from the current 'actiontime'
+        if (isset($input['actiontime']) && $this->fields['actiontime'] != $input['actiontime']) {
+            // Compute the end date based on 'actiontime'
+            $input["end"] = date("Y-m-d H:i:s", $timestart + $input['actiontime']);
+        } else {
+            // If 'actiontime' is not set, compute it based on the start and end times
+            $input["actiontime"] = $timeend - $timestart;
         }
     }
 
@@ -303,7 +332,8 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
 
             $timestart              = strtotime($input["begin"]);
             $timeend                = strtotime($input["end"]);
-            $input["actiontime"]    = $timeend - $timestart;
+
+            $this->handleTaskDuration($input, $timestart, $timeend);
 
             unset($input["plan"]);
 
@@ -356,8 +386,9 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
     }
 
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         // Handle rich-text images and uploaded documents
@@ -401,7 +432,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
                 $update_done = true;
 
                 if (in_array("actiontime", $this->updates)) {
-                    $item->updateActionTime($this->input[$item->getForeignKeyField()]);
+                    $item->updateActionTime($this->fields[$item->getForeignKeyField()]);
                 }
 
                // change ticket status (from splitted button)
@@ -516,7 +547,8 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
 
             $timestart              = strtotime($input["begin"]);
             $timeend                = strtotime($input["end"]);
-            $input["actiontime"]    = $timeend - $timestart;
+
+            $this->handleTaskDuration($input, $timestart, $timeend);
 
             unset($input["plan"]);
             if (!$this->test_valid_date($input)) {
@@ -564,6 +596,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
 
     public function post_addItem()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         // Handle rich-text images and uploaded documents
@@ -620,49 +653,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
             $this->input["_job"]->updateActionTime($this->input[$this->input["_job"]->getForeignKeyField()]);
         }
 
-       // Set pending reason data on parent and self
-        if ($this->input['pending'] ?? 0) {
-            PendingReason_Item::createForItem($this->input["_job"], [
-                'pendingreasons_id'           => $this->input['pendingreasons_id'],
-                'followup_frequency'          => $this->input['followup_frequency'] ?? 0,
-                'followups_before_resolution' => $this->input['followups_before_resolution'] ?? 0,
-            ]);
-            PendingReason_Item::createForItem($this, [
-                'pendingreasons_id'           => $this->input['pendingreasons_id'],
-                'followup_frequency'          => $this->input['followup_frequency'] ?? 0,
-                'followups_before_resolution' => $this->input['followups_before_resolution'] ?? 0,
-            ]);
-
-           // Set parent status to pending
-            $this->input['_status'] = CommonITILObject::WAITING;
-        }
-
-       //change status only if input change
-        if (
-            isset($this->input['_status'])
-            && ($this->input['_status'] != $this->input['_job']->fields['status'])
-        ) {
-            $update = [
-                'status'        => $this->input['_status'],
-                'id'            => $this->input['_job']->fields['id'],
-                '_disablenotif' => true
-            ];
-            $this->input['_job']->update($update);
-        }
-
-        if (
-            !empty($this->fields['begin'])
-            && $this->input["_job"]->isStatusExists(CommonITILObject::PLANNED)
-            && (($this->input["_job"]->fields["status"] == CommonITILObject::INCOMING)
-              || ($this->input["_job"]->fields["status"] == CommonITILObject::ASSIGNED))
-        ) {
-            $input2 = [
-                'id'            => $this->input["_job"]->getID(),
-                'status'        => CommonITILObject::PLANNED,
-                '_disablenotif' => true,
-            ];
-            $this->input["_job"]->update($input2);
-        }
+        $this->updateParentStatus($this->input['_job'], $this->input);
 
         if ($donotif) {
             $options = ['task_id'             => $this->fields["id"],
@@ -670,6 +661,8 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
             ];
             NotificationEvent::raiseEvent('add_task', $this->input["_job"], $options);
         }
+
+        PendingReason_Item::handlePendingReasonUpdateFromNewTimelineItem($this);
 
        // Add log entry in the ITIL object
         $changes = [
@@ -717,7 +710,6 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
         $this->deleteChildrenAndRelationsFromDb(
             [
                 PlanningRecall::class,
-                VObject::class,
             ]
         );
     }
@@ -754,7 +746,8 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
             'table'              => $this->getTable(),
             'field'              => 'content',
             'name'               => __('Description'),
-            'datatype'           => 'text'
+            'datatype'           => 'text',
+            'htmltext'           => true,
         ];
 
         $tab[] = [
@@ -798,7 +791,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
             'table'              => $this->getTable(),
             'field'              => 'actiontime',
             'name'               => __('Total duration'),
-            'datatype'           => 'actiontime',
+            'datatype'           => 'timestamp',
             'massiveaction'      => false
         ];
 
@@ -1099,7 +1092,11 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
      **/
     public static function genericPopulatePlanning($itemtype, $options = [])
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $interv = [];
 
@@ -1113,8 +1110,17 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
         if (!$item = getItemForItemtype($itemtype)) {
             return;
         }
+
+        if (!$item instanceof CommonITILTask) {
+            return;
+        }
+
         $parentitemtype = $item->getItilObjectItemType();
         if (!$parentitem = getItemForItemtype($parentitemtype)) {
+            return;
+        }
+
+        if (!$parentitem instanceof CommonITILObject) {
             return;
         }
 
@@ -1318,7 +1324,11 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
 
                       /// Specific for tickets
                         $interv[$key]["device"] = [];
-                        if (isset($parentitem->hardwaredatas) && !empty($parentitem->hardwaredatas)) {
+                        if (
+                            $parentitem instanceof Ticket
+                            && isset($parentitem->hardwaredatas)
+                            && !empty($parentitem->hardwaredatas)
+                        ) {
                             foreach ($parentitem->hardwaredatas as $hardwaredata) {
                                 $interv[$key]["device"][$hardwaredata->fields['id']] = ($hardwaredata
                                                    ? $hardwaredata->getName() : '');
@@ -1368,6 +1378,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
      **/
     public static function genericDisplayPlanningItem($itemtype, array $val, $who, $type = "", $complete = 0)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $html = "";
@@ -1383,6 +1394,9 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
 
         $parenttype = str_replace('Task', '', $itemtype);
         if ($parent = getItemForItemtype($parenttype)) {
+            if (!$parent instanceof CommonITILObject) {
+                return;
+            }
             $parenttype_fk = $parent->getForeignKeyField();
         } else {
             return;
@@ -1455,8 +1469,10 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
     public function showForm($ID, array $options = [])
     {
         TemplateRenderer::getInstance()->display('components/itilobject/timeline/form_task.html.twig', [
-            'item'      => $options['parent'],
-            'subitem'   => $this
+            'item'               => $options['parent'],
+            'subitem'            => $this,
+            'has_pending_reason' => PendingReason_Item::getForItem($options['parent']) !== false,
+            'params'             => $options,
         ]);
 
         return true;
@@ -1527,6 +1543,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
      */
     public static function getTaskList($status, $showgrouptickets, $start = null, $limit = null)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $prep_req = ['SELECT' => self::getTable() . '.id', 'FROM' => self::getTable()];
@@ -1591,19 +1608,15 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
      */
     public static function showCentralList($start, $status = 'todo', $showgrouptickets = true)
     {
-        global $CFG_GLPI;
+        /** @var \DBmysql $DB */
+        global $DB;
 
         $iterator = self::getTaskList($status, $showgrouptickets);
 
         $total_row_count = count($iterator);
-        $displayed_row_count = (int)$_SESSION['glpidisplay_count_on_home'] > 0
-         ? min((int)$_SESSION['glpidisplay_count_on_home'], $total_row_count)
-         : $total_row_count;
+        $displayed_row_count = min((int)$_SESSION['glpidisplay_count_on_home'], $total_row_count);
 
-        if ($displayed_row_count > 0) {
-            echo "<table class='tab_cadrehov'>";
-            echo "<tr class='noHover'><th colspan='4'>";
-
+        if ($total_row_count > 0) {
             $itemtype = get_called_class();
             switch ($status) {
                 case "todo":
@@ -1643,42 +1656,99 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
                     $title = '';
                     if ($itemtype == "TicketTask") {
                         $title = __("Ticket tasks to do");
+                        $type = Ticket::getTypeName();
+                        $parent_itemtype = Ticket::class;
                     } else if ($itemtype == "ProblemTask") {
                         $title = __("Problem tasks to do");
+                        $type = Problem::getTypeName();
+                        $parent_itemtype = Problem::class;
                     } else if ($itemtype == "ChangeTask") {
                         $title = __("Change tasks to do");
+                        $type = Change::getTypeName();
+                        $parent_itemtype = Change::class;
+                    } else {
+                        // Invalid itemtype
+                        return;
                     }
                     $linked_itemtype = str_replace("Task", "", $itemtype);
-                    echo "<a href=\"" . $linked_itemtype::getSearchURL() . "?" .
+                    $main_header = "<a href=\"" . $linked_itemtype::getSearchURL() . "?" .
                       Toolbox::append_params($options, '&amp;') . "\">" .
                       Html::makeTitle($title, $displayed_row_count, $total_row_count) . "</a>";
                     break;
+
+                default:
+                    // Invalid status
+                    return;
             }
 
-            echo "</th></tr>";
-            echo "<tr>";
-            echo "<th style='width: 75px;'>" . __('ID') . " </th>";
-            $type = "";
-            if ($itemtype == "TicketTask") {
-                $type = Ticket::getTypeName();
-            } else if ($itemtype == "ProblemTask") {
-                $type = Problem::getTypeName();
-            } else if ($itemtype == "ChangeTask") {
-                $type = Change::getTypeName();
-            }
-            echo "<th style='width: 20%;'>" . __('Title') . " (" . strtolower($type) . ")</th>";
-            echo "<th>" . __('Description') . "</th>";
-            echo "</tr>";
+            $twig_params = [
+                'class'        => 'table table-borderless table-striped table-hover card-table',
+                'header_rows'  => [
+                    [
+                        [
+                            'colspan'   => 3,
+                            'content'   => $main_header
+                        ]
+                    ],
+                ],
+                'rows'         => []
+            ];
+
             $i = 0;
-            foreach ($iterator as $data) {
-                self::showVeryShort($data['id'], $itemtype);
+            if ($displayed_row_count > 0) {
+                $twig_params['header_rows'][] = [
+                    [
+                        'content'   => __('ID'),
+                        'style'     => 'width: 75px'
+                    ],
+                    [
+                        'content'   => __('Title') . " (" . strtolower($type) . ")",
+                        'style'     => 'width: 20%'
+                    ],
+                    __('Description')
+                ];
+                foreach ($iterator as $data) {
+                    $row = [
+                        'values' => []
+                    ];
 
-                $i++;
-                if ($i == $displayed_row_count) {
-                    break;
+                    $task = $itemtype::getById($data['id']);
+                    $parent_item = $parent_itemtype::getById($task->fields[getForeignKeyFieldForItemType($parent_itemtype)]);
+
+
+                    if (!$task || !$parent_item) {
+                        // Invalid data; skip
+                        continue;
+                    }
+
+                    // Parent item id with priority hint
+                    $bgcolor = $_SESSION["glpipriority_" . $parent_item->fields["priority"]];
+                    $name = sprintf(__('%1$s: %2$s'), __('ID'), $parent_item->fields["id"]);
+                    $row['values'][] = [
+                        'content' => "<div class='priority_block' style='border-color: $bgcolor'><span style='background: $bgcolor'></span>&nbsp;$name</div>"
+                    ];
+
+                    // Parent item name
+                    $row['values'][] = [
+                        'content' => $parent_item->fields['name']
+                    ];
+
+                    // Task description
+                    $href = $parent_item::getFormURLWithID($parent_item->fields['id']);
+                    $link_title = Html::resume_text(RichText::getTextFromHtml($task->fields['content'], false, true, true), 50);
+                    $row['values'][] = [
+                        'content' => "<a href='$href'>$link_title</a>"
+                    ];
+
+                    $twig_params['rows'][] = $row;
+
+                    $i++;
+                    if ($i == $displayed_row_count) {
+                        break;
+                    }
                 }
             }
-            echo "</table>";
+            echo TemplateRenderer::getInstance()->render('components/table.html.twig', $twig_params);
         }
     }
 
@@ -1696,6 +1766,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
      */
     public static function showVeryShort($ID, $itemtype)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $job  = new $itemtype();
@@ -1713,6 +1784,8 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
                 $item_link = new Change();
                 $item_link->getFromDB($job->fields['changes_id']);
                 $tab_name = "ChangeTask";
+            } else {
+                throw new \RuntimeException(sprintf('Unexpected `%s` itemtype.', $itemtype));
             }
 
             $bgcolor = $_SESSION["glpipriority_" . $item_link->fields["priority"]];
@@ -1773,6 +1846,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
     private static function getItemsAsVCalendars(array $criteria)
     {
 
+        /** @var \DBmysql $DB */
         global $DB;
 
         $item = new static();
@@ -1814,6 +1888,7 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
     public function getAsVCalendar()
     {
 
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!$this->canViewItem()) {
@@ -1871,5 +1946,15 @@ abstract class CommonITILTask extends CommonDBTM implements CalDAVCompatibleItem
         }
 
         return $input;
+    }
+
+    final public function unplan(): bool
+    {
+        return $this->update([
+            'id'         => $this->fields['id'],
+            'begin'      => 'NULL',
+            'end'        => 'NULL',
+            'actiontime' => 0,
+        ]);
     }
 }

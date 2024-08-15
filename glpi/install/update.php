@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -45,6 +45,11 @@ include_once(GLPI_ROOT . "/inc/based_config.php");
 include_once(GLPI_ROOT . "/inc/db.function.php");
 include_once(GLPI_CONFIG_DIR . "/config_db.php");
 
+/**
+ * @var \DBmysql $DB
+ * @var \GLPI $GLPI
+ * @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE
+ */
 global $DB, $GLPI, $GLPI_CACHE;
 
 $GLPI = new GLPI();
@@ -107,6 +112,7 @@ function displayMigrationMessage($id, $msg = "")
 //test la connection a la base de donn???.
 function test_connect()
 {
+    /** @var \DBmysql $DB */
     global $DB;
 
     if ($DB->error == 0) {
@@ -120,7 +126,15 @@ function test_connect()
 //update database
 function doUpdateDb()
 {
+    /**
+     * @var \Migration $migration
+     * @var \Update $update
+     */
     global $migration, $update;
+
+    // Init debug variable
+    // Only show errors
+    Toolbox::setDebugMode(Session::DEBUG_MODE, 0, 0, 1);
 
     $currents            = $update->getCurrents();
     $current_version     = $currents['version'];
@@ -138,8 +152,19 @@ function doUpdateDb()
 
     $update->doUpdates($current_version);
 
-   // Force cache cleaning to ensure it will not contain stale data
+    // Force cache cleaning to ensure it will not contain stale data
     (new CacheManager())->resetAllCaches();
+
+    if (!$update->isUpdatedSchemaConsistent()) {
+        $migration->displayError(
+            __('The database schema is not consistent with the current GLPI version.')
+            . "\n"
+            . sprintf(
+                __('It is recommended to run the "%s" command to see the differences.'),
+                'php bin/console database:check_schema_integrity'
+            )
+        );
+    }
 }
 
 /**
@@ -149,7 +174,10 @@ function doUpdateDb()
  */
 function showSecurityKeyCheckForm()
 {
-    global $CFG_GLPI, $update;
+    /**
+     * @var \Update $update
+     */
+    global $update;
 
     echo '<form action="update.php" method="post">';
     echo '<input type="hidden" name="continuer" value="1" />';

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -71,7 +71,11 @@ class DCRoom extends CommonDBTM
 
     public function showForm($ID, array $options = [])
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
         $rand = mt_rand();
 
         $this->initForm($ID, $options);
@@ -325,6 +329,42 @@ class DCRoom extends CommonDBTM
         return $tab;
     }
 
+    public static function rawSearchOptionsToAdd()
+    {
+        $tab = [];
+
+        // separator
+        $tab[] = [
+            'id'   => 'dcroom',
+            'name' => self::getTypeName(1),
+        ];
+
+        $tab[] = [
+            'id'                 => '1450',
+            'table'              => 'glpi_dcrooms',
+            'field'              => 'name',
+            'datatype'           => 'itemlink',
+            'name'               => DCRoom::getTypeName(1),
+            'massiveaction'      => false,
+            'joinparams'         => [
+                'beforejoin'         => [
+                    'table'              => 'glpi_racks',
+                    'linkfield'          => 'racks_id',
+                    'joinparams'         => [
+                        'beforejoin'         => [
+                            'table'              => 'glpi_items_racks',
+                            'joinparams'         => [
+                                'jointype'           => 'itemtype_item'
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ];
+
+        return $tab;
+    }
+
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
 
@@ -365,6 +405,7 @@ class DCRoom extends CommonDBTM
      **/
     public static function showForDatacenter(Datacenter $datacenter)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $ID = $datacenter->getID();
@@ -463,6 +504,7 @@ class DCRoom extends CommonDBTM
      */
     public function getFilled($current = null)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([

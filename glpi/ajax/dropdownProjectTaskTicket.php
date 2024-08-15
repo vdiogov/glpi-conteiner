@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -51,7 +51,7 @@ if (isset($_POST["projects_id"])) {
     }
 
     $p = ['itemtype'     => ProjectTask::getType(),
-        'entity_restrict' => $_POST['entity_restrict'],
+        'entity_restrict' => Session::getMatchingActiveEntities($_POST['entity_restrict']),
         'myname'          => $_POST["myname"],
         'condition'       => $condition,
         'rand'            => $_POST["rand"]

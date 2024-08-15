@@ -5,7 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2022 Teclib' and contributors.
+ # @copyright 2015-2024 Teclib' and contributors.
  # @copyright 2003-2014 by the INDEPNET Development Team.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
@@ -33,7 +33,8 @@
 
 {% set rand = random() %}
 
-{% set actors = item.getActorsForType(actortypeint, params) %}
+{% set load_actors = params['load_actors'] ?? true %}
+{% set actors = load_actors ? item.getActorsForType(actortypeint, params) : [] %}
 
 {% set required = false %}
 {% if itiltemplate.isMandatoryField('_users_id_' ~ actortype) or itiltemplate.isMandatoryField('_groups_id_' ~ actortype) or (actortype == 'assign' and itiltemplate.isMandatoryField('_suppliers_id_' ~ actortype)) %}
@@ -46,7 +47,8 @@
 {% endif %}
 
 {% set onchange = '' %}
-{% if item.isNewItem() %}
+{% set allow_auto_submit = allow_auto_submit ?? true %}
+{% if allow_auto_submit and item.isNewItem() and actortype == "requester" %}
    {% set onchange = 'this.form.submit();' %}
 {% endif %}
 
@@ -58,7 +60,8 @@
       <option selected="true" value="{{ actor['itemtype'] ~ '_' ~ actor['items_id'] }}"
             data-itemtype="{{ actor['itemtype'] }}" data-items-id="{{ actor['items_id'] }}"
             data-use-notification="{{ actor['use_notification'] }}"
-            data-alternative-email="{{ actor['alternative_email'] }}"
+            data-default-email="{{ actor['default_email'] ?? '' }}"
+            data-alternative-email="{{ actor['alternative_email'] ?? '' }}"
             {% if (actor['itemtype'] == 'User' and itiltemplate.isHiddenField('_users_id_' ~ actortype)) or (actor['itemtype'] == 'Group' and itiltemplate.isHiddenField('_groups_id_' ~ actortype)) %}
                disabled="disabled" style="display: none;"
             {% endif %}
@@ -68,12 +71,15 @@
    {% endfor %}
    </select>
 
-   {% if not item.isNewItem() and not params['template_preview'] and not disable_assign_to_me and canupdate %}
+   {% if not item.isNewItem() and not params['template_preview'] and canassigntome %}
       {{ include('components/itilobject/actors/assign_to_me.html.twig') }}
    {% endif %}
 
    <script type="text/javascript">
-   $(function() {
+
+   // Do not use jquery ready wrapper here as it behave unexpectedly with ajax
+   // requests, adding an unnecessary delay
+   (function() {
       var actorytype = '{{ actortype }}';
 
       // function to display an option in the list or the selected input
@@ -100,6 +106,8 @@
                   fk = "users_id_assign";
                } else if ("{{ actortype }}" == "requester") {
                   fk = "users_id_requester";
+               } else if ("{{ actortype }}" == "observer") {
+                  fk = "users_id_observer";
                }
                break;
             case "Group":
@@ -108,6 +116,8 @@
                   fk = "groups_id_assign";
                } else if ("{{ actortype }}" == "requester") {
                   fk = "groups_id_requester";
+               } else if ("{{ actortype }}" == "observer") {
+                  fk = "groups_id_observer";
                }
                break;
             case "Supplier":
@@ -198,14 +208,13 @@
          return option_element;
       };
 
-      var select2_width = "{{ not disable_assign_to_me ? 'calc(100% - 30px)' : '100%' }}";
+      var select2_width = "{{ canassigntome ? 'calc(100% - 30px)' : '100%' }}";
 
       const actor_select = $("#actor_{{ rand }}");
       actor_select.select2({
          tags: true,
          width: select2_width,
          tokenSeparators: [',', ' '],
-         disabled: false, // TODO can edit
          containerCssClass: 'actor-field',
          templateSelection: function(option) { return genericTemplate_{{ rand }}(option, true); },
          templateResult:    function(option) { return genericTemplate_{{ rand }}(option, false); },
@@ -245,7 +254,7 @@
                   users_right: '{{ users_right ?? 'all' }}',
                   entity_restrict: (actors.requester.length == 0 && is_new_item) ? -1 : {{ entities_id }},
                   searchText: params.term,
-                  _idor_token: '{{ idor_token() }}',
+                  _idor_token: '{{ idor_token(item.getType(), {'users_right': users_right ?? 'all'}) }}',
                   itiltemplate_class: '{{ itiltemplate.getType() }}',
                   itiltemplates_id: {{ itiltemplate.fields['id'] ?? 0 }},
                   itemtype: '{{ item.getType() }}',
@@ -261,22 +270,36 @@
           $('.popover').popover('hide');
       });
 
-       actor_select.parent().popover({
-           selector: '[data-glpi-popover-source]',
-           container: actor_select.parent(),
-           html: true,
-           sanitize: false,
-           trigger: 'hover',
-           delay: {
-               hide: 1500
-           },
-           template: '<' + 'div class="popover shadow" role="tooltip"><' + 'div class="popover-arrow"><' + '/div><' + 'h3 class="popover-header"><' + '/h3><' + 'div class="popover-body"><' + '/div><' + '/div>',
-           content: function() {
+      $(function () {
+         actor_select.parent().popover({
+            selector: '[data-glpi-popover-source]',
+            container: actor_select.parent(),
+            html: true,
+            sanitize: false,
+            trigger: 'hover',
+            delay: {
+               hide: 300
+            },
+            template: '<' + 'div class="popover shadow" role="tooltip"><' + 'div class="popover-arrow"><' + '/div><' + 'h3 class="popover-header"><' + '/h3><' + 'div class="popover-body"><' + '/div><' + '/div>',
+            content: function() {
                // Close other popovers
                $('.popover').popover('hide');
                return $('#' + $(this).attr('data-glpi-popover-source')).html();
-           }
-       });
+            }
+         }).on('hide.bs.popover', function () {
+            // prevent closing popover when user card is hover
+            if ($('.user-info-card:hover').length > 0) {
+               return false;
+            }
+         });
+      });
+
+        // when the mouse leave the user card in the popover, close it
+        $(document).on('mouseleave', '.user-info-card', function() {
+            setTimeout(() => {
+                $('.popover').popover('hide');
+            }, 300);
+        });
 
       // manage actors change
       var updateActors{{ rand }} = function() {
@@ -289,6 +312,7 @@
             var itemtype  = selection.itemtype ?? element.data('itemtype');
             var items_id  = selection.items_id ?? element.data('items-id');
             var use_notif = selection.use_notification  ?? element.data('use-notification')  ?? false;
+            var def_email = selection.default_email ?? element.data('default-email') ?? '';
             var alt_email = selection.alternative_email ?? element.data('alternative-email') ?? '';
 
             if (itemtype == "Email") {
@@ -301,6 +325,7 @@
                itemtype: itemtype,
                items_id: items_id,
                use_notification: use_notif,
+               default_email: def_email,
                alternative_email: alt_email,
             });
          });
@@ -341,6 +366,6 @@
       {% if itiltemplate.isHiddenField('_groups_id_' ~ actortype) %}
          $(".actor_entry[data-itemtype=\"Group\"][data-actortype=\"{{ actortype }}\"]").parent().css("display", "none");
       {% endif %}
-   });
+   })();
    </script>
 {% endif %}

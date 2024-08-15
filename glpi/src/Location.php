@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -409,7 +409,11 @@ class Location extends CommonTreeDropdown
      **/
     public function showItems()
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $locations_id = $this->fields['id'];
         $current_itemtype     = Session::getSavedOption(__CLASS__, 'criterion', '');
@@ -434,11 +438,16 @@ class Location extends CommonTreeDropdown
                 'FROM'   => $table,
                 'WHERE'  => [
                     "$table.locations_id"   => $locations_id,
-                ] + getEntitiesRestrictCriteria($table, 'entities_id')
+                ]
             ];
             if ($item->maybeDeleted()) {
                 $itemtype_criteria['WHERE']['is_deleted'] = 0;
             }
+
+            if ($item->isEntityAssign()) {
+                $itemtype_criteria['WHERE'] + getEntitiesRestrictCriteria($table, 'entities_id');
+            }
+
             $queries[] = $itemtype_criteria;
         }
         $criteria = count($queries) === 1 ? $queries[0] : ['FROM' => new \QueryUnion($queries)];

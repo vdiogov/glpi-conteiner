@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -144,6 +144,7 @@ class Supplier extends CommonDBTM
 
     public function rawSearchOptions()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $tab = [];
@@ -269,7 +270,7 @@ class Supplier extends CommonDBTM
             'massiveaction'      => false
         ];
 
-        if ($_SESSION["glpinames_format"] == User::FIRSTNAME_BEFORE) {
+        if (($_SESSION["glpinames_format"] ?? User::REALNAME_BEFORE) == User::FIRSTNAME_BEFORE) {
             $name1 = 'firstname';
             $name2 = 'name';
         } else {
@@ -373,6 +374,7 @@ class Supplier extends CommonDBTM
      **/
     public function getLinks($withname = false)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $ret = '&nbsp;&nbsp;&nbsp;&nbsp;';
@@ -405,6 +407,7 @@ class Supplier extends CommonDBTM
      **/
     public function showInfocoms()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $instID = $this->fields['id'];
@@ -598,6 +601,7 @@ class Supplier extends CommonDBTM
      **/
     public static function getSuppliersByEmail($email)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $suppliers = $DB->request([

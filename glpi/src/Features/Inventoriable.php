@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,6 +36,7 @@
 namespace Glpi\Features;
 
 use Agent;
+use AutoUpdateSystem;
 use CommonDBTM;
 use Computer;
 use Computer_Item;
@@ -72,18 +73,8 @@ trait Inventoriable
      */
     public function getInventoryFileName(bool $prepend_dir_path = true): ?string
     {
-
-        if ($this->isField('autoupdatesystems_id')) {
-            $source = new \AutoUpdateSystem();
-            $source->getFromDBByCrit(['name' => 'GLPI Native Inventory']);
-
-            if (
-                !$this->isDynamic()
-                || !isset($source->fields['id'])
-                || $this->fields['autoupdatesystems_id'] != $source->fields['id']
-            ) {
-                return null;
-            }
+        if (!$this->isDynamic()) {
+            return null;
         }
 
         $inventory_dir_path = GLPI_INVENTORY_DIR . '/';
@@ -91,10 +82,10 @@ trait Inventoriable
         $items_id = $this->agent->fields['items_id'] ?? $this->fields['id'];
 
         $conf = new Conf();
-       //most files will be XML for now
-        $filename = $conf->buildInventoryFileName($itemtype, $items_id, 'xml');
+        //Check for JSON file, and the XML if JSON does not exists
+        $filename = $conf->buildInventoryFileName($itemtype, $items_id, 'json');
         if (!file_exists($inventory_dir_path . $filename)) {
-            $filename = $conf->buildInventoryFileName($itemtype, $items_id, 'json');
+            $filename = $conf->buildInventoryFileName($itemtype, $items_id, 'xml');
             if (!file_exists($inventory_dir_path . $filename)) {
                 return null;
             }
@@ -110,6 +101,10 @@ trait Inventoriable
      */
     protected function showInventoryInfo()
     {
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
         global $CFG_GLPI, $DB;
 
         if (!$this->isDynamic()) {
@@ -159,7 +154,7 @@ trait Inventoriable
 
         if ($agent === null) {
             echo '<tr class="tab_bg_1">';
-            echo '<td colspan="4">' . __('No agent has been linked.') . '</td>';
+            echo '<td colspan="4">' . __('Agent information is not available.') . '</td>';
             echo "</tr>";
         } else {
             $this->displayAgentInformation();
@@ -181,6 +176,7 @@ trait Inventoriable
      */
     protected function displayAgentInformation()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         echo '<tr class="tab_bg_1">';
@@ -242,54 +238,90 @@ JAVASCRIPT;
 
     public function getInventoryAgent(): ?Agent
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
-        $agent = new Agent();
+        $agent = $this->getMostRecentAgent([
+            'itemtype' => $this->getType(),
+            'items_id' => $this->getID(),
+        ]);
+
+        if (
+            $agent === null
+            && $this instanceof DatabaseInstance
+            && !empty($this->fields['itemtype'])
+            && !empty($this->fields['items_id'])
+        ) {
+            // if no agent has been found, check if there is an agent linked to database host asset
+            $agent = $this->getMostRecentAgent([
+                'itemtype' => $this->fields['itemtype'],
+                'items_id' => $this->fields['items_id'],
+            ]);
+        } elseif (
+            $agent === null
+            && $this instanceof Computer
+        ) {
+            // if no agent has been found, check if there is are linked items, and find most recent agent
+            $relations_iterator = $DB->request(
+                [
+                    'SELECT' => ['itemtype', 'items_id'],
+                    'FROM'   => Computer_Item::getTable(),
+                    'WHERE'  => [
+                        'computers_id' => $this->getID()
+                    ]
+                ]
+            );
+            if (count($relations_iterator) > 0) {
+                $conditions = ['OR' => []];
+                $itemtype_ids = [];
+                foreach ($relations_iterator as $relation_data) {
+                    if (!isset($itemtype_ids[$relation_data['itemtype']])) {
+                        $itemtype_ids[$relation_data['itemtype']] = [];
+                    }
+                    $itemtype_ids[$relation_data['itemtype']][] = $relation_data['items_id'];
+                }
+                foreach ($itemtype_ids as $itemtype => $ids) {
+                    if (count($ids) > 0) {
+                        $conditions['OR'][] = [
+                            'itemtype' => $itemtype,
+                            'items_id' => $ids
+                        ];
+                    }
+                }
+                $agent = $this->getMostRecentAgent($conditions);
+            }
+        }
+
+        $this->agent = $agent;
+
+        return $this->agent;
+    }
+
+    /**
+     * Get most recent agent corresponding to given conditions.
+     *
+     * @param array $conditions
+     *
+     * @return Agent|null
+     */
+    private function getMostRecentAgent(array $conditions): ?Agent
+    {
+        /** @var \DBmysql $DB */
+        global $DB;
+
         $iterator = $DB->request([
             'SELECT'    => ['id'],
             'FROM'      => Agent::getTable(),
-            'WHERE'     => [
-                'itemtype' => $this->getType(),
-                'items_id' => $this->fields['id']
-            ],
+            'WHERE'     => $conditions,
             'ORDERBY'   => ['last_contact DESC'],
             'LIMIT'     => 1
         ]);
-
-        $has_agent = false;
-        if (count($iterator)) {
-            $has_agent = true;
-            $agent->getFromDB($iterator->current()['id']);
+        if (count($iterator) === 0) {
+            return null;
         }
 
-       //if no agent has been found, check if there is a linked item for databases
-        if (!$has_agent && $this instanceof DatabaseInstance) {
-            if (!empty($this->fields['itemtype'] && !empty($this->fields['items_id']))) {
-                $has_agent = $agent->getFromDBByCrit([
-                    'itemtype' => $this->fields['itemtype'],
-                    'items_id' => $this->fields['items_id']
-                ]);
-            }
-        }
-
-       //if no agent has been found, check if there is a linked item, and find its agent
-        if (!$has_agent && $this instanceof Computer) {
-            $citem = new Computer_Item();
-            $has_relation = $citem->getFromDBByCrit([
-                'itemtype' => $this->getType(),
-                'items_id' => $this->fields['id']
-            ]);
-            if ($has_relation) {
-                $has_agent = $agent->getFromDBByCrit([
-                    'itemtype' => Computer::getType(),
-                    'items_id' => $citem->fields['computers_id']
-                ]);
-            }
-        }
-
-        if ($has_agent) {
-            $this->agent = $agent;
-        }
-        return $this->agent;
+        $agent = new Agent();
+        $agent->getFromDB($iterator->current()['id']);
+        return $agent;
     }
 }

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -120,6 +120,7 @@ abstract class NotificationSetting extends CommonDBTM
      */
     public static function disableAll()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $CFG_GLPI['use_notifications'] = 0;

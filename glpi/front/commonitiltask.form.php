@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -39,6 +39,9 @@
  */
 
 use Glpi\Event;
+
+/** @var \DBmysql $DB */
+global $DB;
 
 // autoload include in objecttask.form (tickettask, problemtask,...)
 if (!defined('GLPI_ROOT')) {
@@ -100,6 +103,20 @@ if (isset($_POST["add"])) {
         "tracking",
         //TRANS: %s is the user login
         sprintf(__('%s updates a task'), $_SESSION["glpiname"])
+    );
+    $redirect = $itemtype::getFormURLWithID($task->getField($fk));
+    $handled = true;
+} else if (isset($_POST["unplan"])) {
+    $task->check($_POST["id"], UPDATE);
+    $task->unplan();
+
+    Event::log(
+        $task->getField($fk),
+        strtolower($itemtype),
+        4,
+        "tracking",
+        //TRANS: %s is the user login
+        sprintf(__('%s unplans a task'), $_SESSION["glpiname"])
     );
     $redirect = $itemtype::getFormURLWithID($task->getField($fk));
     $handled = true;

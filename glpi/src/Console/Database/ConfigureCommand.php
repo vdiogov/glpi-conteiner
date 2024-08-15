@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,17 +35,18 @@
 
 namespace Glpi\Console\Database;
 
+use Glpi\Console\Command\ConfigurationCommandInterface;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-class ConfigureCommand extends AbstractConfigureCommand
+class ConfigureCommand extends AbstractConfigureCommand implements ConfigurationCommandInterface
 {
     protected function configure()
     {
 
         parent::configure();
 
-        $this->setName('glpi:database:configure');
+        $this->setName('database:configure');
         $this->setAliases(['db:configure']);
         $this->setDescription('Define database configuration');
     }
@@ -55,5 +56,10 @@ class ConfigureCommand extends AbstractConfigureCommand
         $this->configureDatabase($input, $output);
 
         return 0; // Success if configuration throw no EarlyExitException
+    }
+
+    public function getConfigurationFilesToUpdate(InputInterface $input): array
+    {
+        return ['config_db.php'];
     }
 }

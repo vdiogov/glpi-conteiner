@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,13 +36,14 @@
 namespace Glpi\Inventory\Asset;
 
 use Glpi\Inventory\Conf;
+use Glpi\Toolbox\Sanitizer;
 use Item_RemoteManagement;
-use Toolbox;
 
 class RemoteManagement extends InventoryAsset
 {
     public function prepare(): array
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!in_array($this->item->getType(), $CFG_GLPI['remote_management_types'])) {
@@ -77,6 +78,7 @@ class RemoteManagement extends InventoryAsset
      */
     protected function getExisting(): array
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $db_existing = [];
@@ -114,7 +116,7 @@ class RemoteManagement extends InventoryAsset
                     $input = (array)$val + [
                         'id'           => $keydb
                     ];
-                    $mgmt->update(Toolbox::addslashes_deep($input));
+                    $mgmt->update(Sanitizer::sanitize($input));
                     unset($value[$k]);
                     unset($db_mgmt[$keydb]);
                     break;
@@ -134,12 +136,17 @@ class RemoteManagement extends InventoryAsset
             $val->itemtype = $this->item->getType();
             $val->items_id = $this->item->fields['id'];
             $val->is_dynamic = 1;
-            $mgmt->add(Toolbox::addslashes_deep((array)$val));
+            $mgmt->add(Sanitizer::sanitize((array)$val));
         }
     }
 
     public function checkConf(Conf $conf): bool
     {
         return true;
+    }
+
+    public function getItemtype(): string
+    {
+        return \Item_RemoteManagement::class;
     }
 }

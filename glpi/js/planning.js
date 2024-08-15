@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -83,6 +83,7 @@ var GLPIPlanning  = {
         var all_days = [0, 1, 2, 3, 4, 5, 6];
         var enabled_days = CFG_GLPI.planning_work_days;
         var hidden_days = all_days.filter(day => !enabled_days.some(n => n == day));
+        var loadedLocales = Object.keys(FullCalendarLocales);
 
         this.calendar = new FullCalendar.Calendar(document.getElementById(GLPIPlanning.dom_id), {
             plugins:     options.plugins,
@@ -105,6 +106,7 @@ var GLPIPlanning  = {
             agendaEventMinHeight: 13,
             header: options.header,
             hiddenDays: hidden_days,
+            locale: loadedLocales.length === 1 ? loadedLocales[0] : undefined,
             //resources: options.resources,
             resources: function(fetchInfo, successCallback) {
             // Filter resources by whether their id is in visible_res.
@@ -437,7 +439,9 @@ var GLPIPlanning  = {
                 }).done(function() {
                     // indicate to central page we're done rendering
                     if (!options.full_view) {
-                        $(document).trigger('masonry_grid:layout');
+                        setTimeout(function () {
+                            $(document).trigger('masonry_grid:layout');
+                        }, 100);
                     }
                 });
 
@@ -556,6 +560,7 @@ var GLPIPlanning  = {
                         },
                         dialogclass: 'modal-lg',
                         title: __('Edit an event'),
+                        bs_focus: false
                     });
                 }
             },
@@ -588,27 +593,35 @@ var GLPIPlanning  = {
                 var start = info.start;
                 var end = info.end;
 
-                glpi_ajax_dialog({
-                    url: CFG_GLPI.root_doc+"/ajax/planning.php",
-                    params: {
-                        action: 'add_event_fromselect',
-                        begin:  start.toISOString(),
-                        end:    end.toISOString(),
-                        res_itemtype: itemtype,
-                        res_items_id: items_id,
-                    },
-                    dialogclass: 'modal-lg',
-                    title: __('Add an event'),
-                });
+                if ($('div.modal.planning-modal').length === 0) {
+                    glpi_ajax_dialog({
+                        url: CFG_GLPI.root_doc + "/ajax/planning.php",
+                        params: {
+                            action: 'add_event_fromselect',
+                            begin: start.toISOString(),
+                            end: end.toISOString(),
+                            res_itemtype: itemtype,
+                            res_items_id: items_id,
+                        },
+                        dialogclass: 'modal-lg planning-modal',
+                        title: __('Add an event'),
+                        bs_focus: false
+                    });
+                    GLPIPlanning.calendar.setOption('selectable', false);
+                    window.setTimeout(function() {
+                        GLPIPlanning.calendar.setOption('selectable', true);
+                    }, 500);
+                }
 
                 GLPIPlanning.calendar.unselect();
             }
         });
 
-        var loadedLocales = Object.keys(FullCalendarLocales);
-        if (loadedLocales.length === 1) {
-            GLPIPlanning.calendar.setOption('locale', loadedLocales[0]);
-        }
+        // Load the last known view only if it is valid (else load default view)
+        const view = this.calendar.isValidViewType(options.default_view) ?
+            options.default_view :
+            default_options.default_view;
+        this.calendar.changeView(view);
 
         $('.planning_on_central a')
             .mousedown(function() {

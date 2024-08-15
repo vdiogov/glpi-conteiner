@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -32,6 +32,9 @@
  *
  * ---------------------------------------------------------------------
  */
+
+// Must be available during installation. This script already checks for permissions when the flag usually set by the installer is missing.
+$SECURITY_STRATEGY = 'no_check';
 
 include('../inc/includes.php');
 

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -37,6 +37,9 @@
  * @since 0.83
  */
 
+/** @var array $CFG_GLPI */
+global $CFG_GLPI;
+
 // Direct access to file
 if (strpos($_SERVER['PHP_SELF'], "planningcheck.php")) {
     $AJAX_INCLUDE = 1;
@@ -46,8 +49,6 @@ if (strpos($_SERVER['PHP_SELF'], "planningcheck.php")) {
 }
 
 Session::checkLoginUser();
-
-/** @global array $CFG_GLPI */
 
 $append_params = [
     "checkavailability" => "checkavailability",

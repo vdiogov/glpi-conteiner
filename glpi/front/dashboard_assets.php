@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,13 +33,12 @@
  * ---------------------------------------------------------------------
  */
 
-/**
- * Filename was previously states.php
- * @since 0.84
- */
+use Glpi\Dashboard\Dashboard;
+
+/** @var array $CFG_GLPI */
+global $CFG_GLPI;
 
 include('../inc/includes.php');
-
 
 Session::checkCentralAccess();
 $default = Glpi\Dashboard\Grid::getDefaultDashboardForMenu('assets');
@@ -49,9 +48,15 @@ if ($default == "") {
     Html::redirect($CFG_GLPI["root_doc"] . "/front/computer.php");
 }
 
+$dashboard = new Dashboard($default);
+if (!$dashboard->canViewCurrent()) {
+    Html::displayRightError();
+    exit();
+}
+
 Html::header(__('Assets Dashboard'), $_SERVER['PHP_SELF'], "assets", "dashboard");
 
-$dashboard = new Glpi\Dashboard\Grid($default);
-$dashboard->showDefault();
+$grid = new Glpi\Dashboard\Grid($default);
+$grid->showDefault();
 
 Html::footer();

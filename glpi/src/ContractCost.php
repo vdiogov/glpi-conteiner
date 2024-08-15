@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -86,7 +86,7 @@ class ContractCost extends CommonDBChild
 
        // can exists for template
         if (
-            ($item->getType() == 'Contract')
+            $item instanceof Contract
             && Contract::canView()
         ) {
             $nb = 0;
@@ -195,10 +195,10 @@ class ContractCost extends CommonDBChild
     public function initBasedOnPrevious()
     {
 
-        $ticket = new Ticket();
+        $contract = new Contract();
         if (
             !isset($this->fields['contracts_id'])
-            || !$ticket->getFromDB($this->fields['contracts_id'])
+            || !$contract->getFromDB($this->fields['contracts_id'])
         ) {
             return false;
         }
@@ -226,6 +226,7 @@ class ContractCost extends CommonDBChild
      **/
     public function getLastCostForContract($contracts_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -308,7 +309,11 @@ class ContractCost extends CommonDBChild
      **/
     public static function showForContract(Contract $contract, $withtemplate = 0)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $ID = $contract->fields['id'];
 

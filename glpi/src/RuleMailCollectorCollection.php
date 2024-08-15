@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -54,8 +54,12 @@ class RuleMailCollectorCollection extends RuleCollection
     public function prepareInputDataForProcess($input, $params)
     {
 
-        $input['mailcollector']       = $params['mailcollector'];
-        $input['_users_id_requester'] = $params['_users_id_requester'];
+        if (isset($params['mailcollector'])) {
+            $input['mailcollector'] = $params['mailcollector'];
+        }
+        if (isset($params['_users_id_requester'])) {
+            $input['_users_id_requester'] = $params['_users_id_requester'];
+        }
 
         $fields = $this->getFieldsToLookFor();
 

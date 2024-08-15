@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @copyright 2010-2022 by the FusionInventory Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
@@ -48,11 +48,7 @@ class NetworkCard extends Device
 
     protected $extra_data = ['controllers' => null];
     protected $ignored = ['controllers' => null];
-
-    public function __construct(CommonDBTM $item, array $data = null)
-    {
-        parent::__construct($item, $data, 'Item_DeviceNetworkCard');
-    }
+    private array $cards_macs = [];
 
     public function prepare(): array
     {
@@ -90,6 +86,26 @@ class NetworkCard extends Device
             foreach ($mapping as $origin => $dest) {
                 if (property_exists($val, $origin)) {
                     $val->$dest = $val->$origin;
+                }
+            }
+
+            if (property_exists($val, 'status')) {
+                switch ($val->status) {
+                    case 'up':
+                        $val_port->ifinternalstatus = '1';
+                        break;
+                    case 'down':
+                        $val_port->ifinternalstatus = '2';
+                        break;
+                    default:
+                        $val_port->ifinternalstatus = null;
+                }
+            }
+            if (property_exists($val, 'speed')) {
+                if ((int)$val->speed > 0) {
+                    $val_port->ifstatus = '1';  //up
+                } else {
+                    $val_port->ifstatus = '2';  //down
                 }
             }
 
@@ -152,7 +168,7 @@ class NetworkCard extends Device
                 }
             }
 
-           //network ports
+            //network ports
             $ports = [];
             foreach ($mapping_ports as $origin => $dest) {
                 if (property_exists($val_port, $origin)) {
@@ -206,7 +222,20 @@ class NetworkCard extends Device
                     if (property_exists($val_port, 'instantiation_type')) {
                         switch ($val_port->instantiation_type) {
                             case 'Ethernet':
+                            case 'ethernet':
                                 $val_port->instantiation_type = 'NetworkPortEthernet';
+                                break;
+                            case 'aggregate':
+                                $val_port->instantiation_type = 'NetworkPortAggregate';
+                                break;
+                            case 'alias':
+                                $val_port->instantiation_type = 'NetworkPortAlias';
+                                break;
+                            case 'dialup':
+                                $val_port->instantiation_type = 'NetworkPortDialup';
+                                break;
+                            case 'loopback':
+                                $val_port->instantiation_type = 'NetworkPortLocal';
                                 break;
                             case 'wifi':
                                 $val_port->instantiation_type = 'NetworkPortWifi';
@@ -250,6 +279,16 @@ class NetworkCard extends Device
                 }
                 $this->ports += $ports;
             }
+
+            //check for mac unicity among cards
+            if (property_exists($val, 'mac')) {
+                if (in_array($val->mac, $this->cards_macs)) {
+                    unset($this->data[$k]);
+                    continue;
+                } else {
+                    $this->cards_macs[] = $val->mac;
+                }
+            }
         }
         return $this->data;
     }
@@ -264,5 +303,10 @@ class NetworkCard extends Device
     {
        //ports are handled from main asset in NetworkCard case
         return;
+    }
+
+    public function getItemtype(): string
+    {
+        return \Item_DeviceNetworkCard::class;
     }
 }

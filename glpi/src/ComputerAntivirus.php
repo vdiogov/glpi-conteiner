@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -32,6 +32,8 @@
  *
  * ---------------------------------------------------------------------
  */
+
+use Glpi\Application\View\TemplateRenderer;
 
 /**
  * @since 9.1
@@ -58,7 +60,7 @@ class ComputerAntivirus extends CommonDBChild
 
        // can exists for template
         if (
-            ($item->getType() == 'Computer')
+            $item instanceof Computer
             && Computer::canView()
         ) {
             $nb = 0;
@@ -87,6 +89,7 @@ class ComputerAntivirus extends CommonDBChild
 
         $ong = [];
         $this->addDefaultFormTab($ong);
+        $this->addStandardTab('Lock', $ong, $options);
         $this->addStandardTab('Log', $ong, $options);
 
         return $ong;
@@ -149,6 +152,7 @@ class ComputerAntivirus extends CommonDBChild
             'field'              => 'name',
             'name'               => __('Name'),
             'forcegroupby'       => true,
+            'usehaving'          => true,
             'massiveaction'      => false,
             'datatype'           => 'dropdown',
             'joinparams'         => [
@@ -163,6 +167,7 @@ class ComputerAntivirus extends CommonDBChild
             'field'              => 'antivirus_version',
             'name'               => _n('Version', 'Versions', 1),
             'forcegroupby'       => true,
+            'usehaving'          => true,
             'massiveaction'      => false,
             'datatype'           => 'text',
             'joinparams'         => [
@@ -182,6 +187,7 @@ class ComputerAntivirus extends CommonDBChild
             ],
             'massiveaction'      => false,
             'forcegroupby'       => true,
+            'usehaving'          => true,
             'searchtype'         => ['equals']
         ];
 
@@ -197,6 +203,7 @@ class ComputerAntivirus extends CommonDBChild
             ],
             'massiveaction'      => false,
             'forcegroupby'       => true,
+            'usehaving'          => true,
             'searchtype'         => ['equals']
         ];
 
@@ -206,6 +213,7 @@ class ComputerAntivirus extends CommonDBChild
             'field'              => 'signature_version',
             'name'               => __('Signature database version'),
             'forcegroupby'       => true,
+            'usehaving'          => true,
             'massiveaction'      => false,
             'datatype'           => 'text',
             'joinparams'         => [
@@ -219,6 +227,7 @@ class ComputerAntivirus extends CommonDBChild
             'field'              => 'date_expiration',
             'name'               => __('Expiration date'),
             'forcegroupby'       => true,
+            'usehaving'          => true,
             'massiveaction'      => false,
             'datatype'           => 'date',
             'joinparams'         => [
@@ -253,58 +262,13 @@ class ComputerAntivirus extends CommonDBChild
             $comp->getFromDB($options['computers_id']);
         }
 
-        $this->showFormHeader($options);
-
-        if ($this->isNewID($ID)) {
-            echo "<input type='hidden' name='computers_id' value='" . $options['computers_id'] . "'>";
-        }
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . Computer::getTypeName(1) . "</td>";
-        echo "<td>" . $comp->getLink() . "</td>";
-        $this->autoinventoryInformation();
-        echo "</tr>\n";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Name') . "</td>";
-        echo "<td>";
-        echo Html::input('name', ['value' => $this->fields['name']]);
-        echo "</td>";
-        echo "<td>" . __('Active') . "</td>";
-        echo "<td>";
-        Dropdown::showYesNo('is_active', $this->fields['is_active']);
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . Manufacturer::getTypeName(1) . "</td>";
-        echo "<td>";
-        Dropdown::show('Manufacturer', ['value' => $this->fields["manufacturers_id"]]);
-        echo "</td>";
-        echo "<td>" . __('Up to date') . "</td>";
-        echo "<td>";
-        Dropdown::showYesNo('is_uptodate', $this->fields['is_uptodate']);
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Antivirus version') . "</td>";
-        echo "<td>";
-        echo Html::input('antivirus_version', ['value' => $this->fields['antivirus_version']]);
-        echo "</td>";
-        echo "<td>" . __('Signature database version') . "</td>";
-        echo "<td>";
-        echo Html::input('signature_version', ['value' => $this->fields['signature_version']]);
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Expiration date') . "</td>";
-        echo "<td>";
-        Html::showDateField("date_expiration", ['value' => $this->fields['date_expiration']]);
-        echo "</td>";
-        echo "<td colspan='2'></td>";
-        echo "</tr>";
-
         $options['canedit'] = Session::haveRight("computer", UPDATE);
-        $this->showFormButtons($options);
+        $this->initForm($ID, $options);
+        TemplateRenderer::getInstance()->display('components/form/computerantivirus.html.twig', [
+            'item'                      => $this,
+            'computer'                => $comp,
+            'params'                    => $options,
+        ]);
 
         return true;
     }
@@ -320,6 +284,7 @@ class ComputerAntivirus extends CommonDBChild
      **/
     public static function showForComputer(Computer $comp, $withtemplate = 0)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $ID = $comp->fields['id'];
@@ -419,9 +384,19 @@ class ComputerAntivirus extends CommonDBChild
     {
         $input = parent::prepareInputForAdd($input);
 
-        // Clear date if empty to avoid SQL error
-        if (empty($input['date_expiration'])) {
-            unset($input['date_expiration']);
+        if (isset($input['date_expiration']) && empty($input['date_expiration'])) {
+            $input['date_expiration'] = 'NULL';
+        }
+
+        return $input;
+    }
+
+    public function prepareInputForUpdate($input)
+    {
+        $input = parent::prepareInputForUpdate($input);
+
+        if (isset($input['date_expiration']) && empty($input['date_expiration'])) {
+            $input['date_expiration'] = 'NULL';
         }
 
         return $input;

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -285,5 +285,14 @@ class PendingReason extends CommonDropdown
         }
 
         return parent::getSpecificValueToSelect($field, $name, $values, $options);
+    }
+
+    public function cleanDBonPurge()
+    {
+        $this->deleteChildrenAndRelationsFromDb(
+            [
+                PendingReason_Item::class,
+            ]
+        );
     }
 }

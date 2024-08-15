@@ -5,7 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2022 Teclib' and contributors.
+ # @copyright 2015-2024 Teclib' and contributors.
  # @copyright 2003-2014 by the INDEPNET Development Team.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
@@ -33,13 +33,14 @@
 
 {% import 'components/form/fields_macros.html.twig' as fields %}
 
+{% set no_header = no_header|default(not item.isNewItem() and not _get._in_modal|default(false)) %}
 {% set bg = '' %}
 {% if item.isDeleted() %}
    {% set bg = 'asset-deleted' %}
 {% endif %}
 
 <div class="asset {{ bg }}">
-   {{ include('components/form/header.html.twig') }}
+   {{ include('components/form/header.html.twig', {'in_twig': true}) }}
 
    {% set rand = random() %}
    {% set params  = params ?? [] %}
@@ -73,6 +74,16 @@
                            item,
                            __('First name'),
                            withtemplate,
+                           field_options
+                        ) }}
+                     {% endif %}
+
+                     {% if item.isField('template_name') and withtemplate == 1 and no_header %}
+                        {{ fields.autoNameField(
+                           'template_name',
+                           item,
+                           __('Template name'),
+                           0,
                            field_options
                         ) }}
                      {% endif %}
@@ -177,7 +188,7 @@
                            type_itemtype,
                            type_fk,
                            item.fields[type_fk],
-                           _n('Type', 'Types', 1),
+                           type_itemtype|itemtype_name,
                            field_options
                         ) }}
                      {% endif %}
@@ -333,13 +344,19 @@
                         {% if item_type == 'Certificate' %}
                            {{ fields.dateField('date_expiration', item.fields['date_expiration'], __('Expiration date'), {
                               'helper': __('Empty for infinite'),
-                              'checkIsExpired': true
-                           }) }}
+                              'checkIsExpired': false,
+                              'expiration_class' : params.expiration_class
+                           }|merge(field_options)) }}
+                        {% elseif item_type == 'ComputerAntivirus' %}
+                           {{ fields.dateField('date_expiration', item.fields['date_expiration'], __('Expiration date'), {
+                              'helper': __('Empty for infinite'),
+                              'checkIsExpired': true,
+                           }|merge(field_options)) }}
                         {% else %}
                            {{ fields.datetimeField('date_expiration', item.fields['date_expiration'], __('Expiration date'), {
                               'helper': __('Empty for infinite'),
                               'checkIsExpired': true
-                           }) }}
+                           }|merge(field_options)) }}
                         {% endif %}
                      {% endif %}
 
@@ -357,7 +374,7 @@
                            'User',
                            'users_id_tech',
                            item.fields['users_id_tech'],
-                           __('Technician in charge of the hardware'),
+                           __('Technician in charge'),
                            field_options|merge({
                               'entity': item.fields['entities_id'],
                               'right': 'own_ticket',
@@ -380,7 +397,7 @@
                            'Group',
                            'groups_id_tech',
                            item.fields['groups_id_tech'],
-                           __('Group in charge of the hardware'),
+                           __('Group in charge'),
                            field_options|merge({
                               'entity': item.fields['entities_id'],
                               'condition': {'is_assign': 1},
@@ -441,6 +458,16 @@
 
                      {% if item.isField('sysdescr') %}
                         {{ fields.textareaField('sysdescr', item.fields['sysdescr'], __('Sysdescr')) }}
+                     {% endif %}
+
+                     {% if item.isField('snmpcredentials_id') %}
+                        {{ fields.dropdownField(
+                           'SNMPCredential',
+                           'snmpcredentials_id',
+                           item.fields['snmpcredentials_id'],
+                           'SNMPCredential'|itemtype_name,
+                           field_options
+                        ) }}
                      {% endif %}
 
                      {% if item.isField('users_id') %}
@@ -626,6 +653,11 @@
                             __('Active'),
                             field_options
                         ) }}
+                     {% endif %}
+
+                     {# display last_boot data only if item is dynamic and have field #}
+                     {% if item.isField('last_boot') and item.isField('is_dynamic') and item.fields['is_dynamic'] %}
+                        {{ fields.htmlField('last_boot', item.fields['last_boot']|formatted_datetime(true), __('Last boot date')) }}
                      {% endif %}
 
                      {% block more_fields %}

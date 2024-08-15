@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @copyright 2010-2022 by the FusionInventory Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
@@ -37,6 +37,7 @@
 use Glpi\Application\ErrorHandler;
 use Glpi\Application\View\TemplateRenderer;
 use Glpi\Inventory\Conf;
+use Glpi\Plugin\Hooks;
 use Glpi\Toolbox\Sanitizer;
 use GuzzleHttp\Client as Guzzle_Client;
 use GuzzleHttp\Psr7\Response;
@@ -63,10 +64,12 @@ class Agent extends CommonDBTM
     public $dohistory = true;
 
     /** @var string */
-    public static $rightname = 'computer';
+    public static $rightname = 'agent';
    //static $rightname = 'inventory';
 
-    private static $found_adress = false;
+    private static $found_address = false;
+
+    public $history_blacklist = ['last_contact'];
 
     public static function getTypeName($nb = 0)
     {
@@ -157,6 +160,78 @@ class Agent extends CommonDBTM
                 'additionalfields' => ['itemtype'],
                 'joinparams'       => ['jointype' => 'child']
             ],
+            [
+                'id'            => '16',
+                'table'         => $this->getTable(),
+                'field'         => 'remote_addr',
+                'name'          => __('Public contact address'),
+                'datatype'      => 'text',
+                'massiveaction' => false,
+            ],
+            [
+                'id'            => 17,
+                'table'         => $this->getTable(),
+                'field'         => 'use_module_wake_on_lan',
+                'name'          => __('Wake on LAN'),
+                'datatype'      => 'bool',
+                'massiveaction' => false,
+            ],
+            [
+                'id'            => 18,
+                'table'         => $this->getTable(),
+                'field'         => 'use_module_computer_inventory',
+                'name'          => __('Computer inventory'),
+                'datatype'      => 'bool',
+                'massiveaction' => false,
+            ],
+            [
+                'id'            => 19,
+                'table'         => $this->getTable(),
+                'field'         => 'use_module_esx_remote_inventory',
+                'name'          => __('ESX remote inventory'),
+                'datatype'      => 'bool',
+                'massiveaction' => false,
+            ],
+            [
+                'id'            => 20,
+                'table'         => $this->getTable(),
+                'field'         => 'use_module_network_inventory',
+                'name'          => __('Network inventory (SNMP)'),
+                'datatype'      => 'bool',
+                'massiveaction' => false,
+            ],
+            [
+                'id'            => 21,
+                'table'         => $this->getTable(),
+                'field'         => 'use_module_network_discovery',
+                'name'          => __('Network discovery (SNMP)'),
+                'datatype'      => 'bool',
+                'massiveaction' => false,
+            ],
+            [
+                'id'            => 22,
+                'table'         => $this->getTable(),
+                'field'         => 'use_module_package_deployment',
+                'name'          => __('Package Deployment'),
+                'datatype'      => 'bool',
+                'massiveaction' => false,
+            ],
+            [
+                'id'            => 23,
+                'table'         => $this->getTable(),
+                'field'         => 'use_module_collect_data',
+                'name'          => __('Collect data'),
+                'datatype'      => 'bool',
+                'massiveaction' => false,
+            ],
+            [
+                'id'            => 24,
+                'table'         => $this->getTable(),
+                'field'         => 'use_module_remote_inventory',
+                'name'          => __('Remote inventory'),
+                'datatype'      => 'bool',
+                'massiveaction' => false,
+            ]
 
         ];
 
@@ -240,6 +315,20 @@ class Agent extends CommonDBTM
             'datatype'   => 'text',
         ] + $baseopts;
 
+        $tab[] = [
+            'id'         => 905,
+            'field'      => 'remote_addr',
+            'name'       => __('Public contact address'),
+            'datatype'   => 'text',
+        ] + $baseopts;
+
+        $tab[] = [
+            'id'         => 906,
+            'field'      => 'useragent',
+            'name'       => __('Useragent'),
+            'datatype'   => 'text',
+        ] + $baseopts;
+
         return $tab;
     }
 
@@ -254,6 +343,7 @@ class Agent extends CommonDBTM
 
         $ong = [];
         $this->addDefaultFormTab($ong);
+        $this->addStandardTab('RuleMatchedLog', $ong, $options);
         $this->addStandardTab('Log', $ong, $options);
 
         return $ong;
@@ -269,6 +359,7 @@ class Agent extends CommonDBTM
      */
     public function showForm($id, array $options = [])
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!empty($id)) {
@@ -300,17 +391,22 @@ class Agent extends CommonDBTM
      */
     public function handleAgent($metadata)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $deviceid = $metadata['deviceid'];
 
         $aid = false;
-        if ($this->getFromDBByCrit(['deviceid' => $deviceid])) {
+        if ($this->getFromDBByCrit(Sanitizer::dbEscapeRecursive(['deviceid' => $deviceid]))) {
             $aid = $this->fields['id'];
         }
 
         $atype = new AgentType();
-        $atype->getFromDBByCrit(['name' => 'Core']);
+        if (!$atype->getFromDBByCrit(['name' => 'Core'])) {
+            $atype->add([
+                'name' => 'Core',
+            ]);
+        }
 
         $input = [
             'deviceid'     => $deviceid,
@@ -329,6 +425,39 @@ class Agent extends CommonDBTM
             $input['tag'] = $metadata['tag'];
         }
 
+        if (isset($metadata['port'])) {
+            $input['port'] = $metadata['port'];
+        }
+
+        if (isset($metadata['enabled-tasks'])) {
+            $input['use_module_computer_inventory']   = in_array("inventory", $metadata['enabled-tasks']) ? 1 : 0;
+            $input['use_module_network_discovery']    = in_array("netdiscovery", $metadata['enabled-tasks']) ? 1 : 0;
+            $input['use_module_network_inventory']    = in_array("netinventory", $metadata['enabled-tasks']) ? 1 : 0;
+            $input['use_module_remote_inventory']     = in_array("remoteinventory", $metadata['enabled-tasks']) ? 1 : 0;
+            $input['use_module_wake_on_lan']          = in_array("wakeonlan", $metadata['enabled-tasks']) ? 1 : 0;
+            $input['use_module_esx_remote_inventory'] = in_array("esx", $metadata['enabled-tasks']) ? 1 : 0;
+            $input['use_module_package_deployment']   = in_array("deploy", $metadata['enabled-tasks']) ? 1 : 0;
+            $input['use_module_collect_data']         = in_array("collect", $metadata['enabled-tasks']) ? 1 : 0;
+        }
+
+        $remote_ip = "";
+        if (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            //Managing IP through a PROXY
+            $remote_ip = explode(', ', $_SERVER['HTTP_X_FORWARDED_FOR'])[0];
+        } elseif (isset($_SERVER['HTTP_X_REAL_IP'])) {
+            //try with X-Real-IP
+            $remote_ip = $_SERVER['HTTP_X_REAL_IP'];
+        } elseif (isset($_SERVER['REMOTE_ADDR'])) {
+            //then get connected IP
+            $remote_ip = $_SERVER['REMOTE_ADDR'];
+        }
+
+        $remote_ip = new IPAddress($remote_ip);
+        if ($remote_ip->is_valid()) {
+            $input['remote_addr'] = $remote_ip->getTextual();
+        }
+
+
         $has_expected_agent_type = in_array($metadata['itemtype'], $CFG_GLPI['agent_types']);
         if ($deviceid === 'foo' || (!$has_expected_agent_type && !$aid)) {
             $input += [
@@ -339,7 +468,7 @@ class Agent extends CommonDBTM
             return 0;
         }
 
-        $input = Toolbox::addslashes_deep($input);
+        $input = Sanitizer::sanitize($input);
         if ($aid) {
             $input['id'] = $aid;
             // We should not update itemtype in db if not an expected one
@@ -379,6 +508,7 @@ class Agent extends CommonDBTM
 
     public function prepareInputForAdd($input)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (isset($CFG_GLPI['threads_networkdiscovery']) && !isset($input['threads_networkdiscovery'])) {
@@ -416,28 +546,29 @@ class Agent extends CommonDBTM
     }
 
     /**
-     * Guess possible adresses the agent should answer on
+     * Guess possible addresses the agent should answer on
      *
      * @return array
      */
     public function guessAddresses(): array
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
-        $adresses = [];
+        $addresses = [];
 
        //retrieve linked items
         $item = $this->getLinkedItem();
         if ((int)$item->getID() > 0) {
             $item_name = $item->getFriendlyName();
-            $adresses[] = $item_name;
+            $addresses[] = $item_name;
 
            //deviceid should contains machines name
             $matches = [];
             preg_match('/^(\s)+-\d{4}(-\d{2}){5}$/', $this->fields['deviceid'], $matches);
             if (isset($matches[1])) {
-                if (!in_array($matches[1], $adresses)) {
-                    $adresses[] = $matches[1];
+                if (!in_array($matches[1], $addresses)) {
+                    $addresses[] = $matches[1];
                 }
             }
 
@@ -484,12 +615,12 @@ class Agent extends CommonDBTM
                 ]
             ]);
             foreach ($ports_iterator as $row) {
-                if (!in_array($row['name'], $adresses)) {
+                if (!in_array($row['name'], $addresses)) {
                     if ($row['version'] == 4) {
-                        $adresses[] = $row['name'];
+                        $addresses[] = $row['name'];
                     } else {
                         //surrounds IPV6 with '[' and ']'
-                        $adresses[] = "[" . $row['name'] . "]";
+                        $addresses[] = "[" . $row['name'] . "]";
                     }
                 }
             }
@@ -513,11 +644,11 @@ class Agent extends CommonDBTM
             ]);
 
             foreach ($iterator as $row) {
-                 $adresses[] = sprintf('%s.%s', $item_name, $row['name']);
+                 $addresses[] = sprintf('%s.%s', $item_name, $row['name']);
             }
         }
 
-        return $adresses;
+        return $addresses;
     }
 
     /**
@@ -527,7 +658,7 @@ class Agent extends CommonDBTM
      */
     public function getAgentURLs(): array
     {
-        $adresses = $this->guessAddresses();
+        $addresses = $this->guessAddresses();
         $protocols = ['http', 'https'];
         $port = (int)$this->fields['port'];
         if ($port === 0) {
@@ -536,7 +667,7 @@ class Agent extends CommonDBTM
 
         $urls = [];
         foreach ($protocols as $protocol) {
-            foreach ($adresses as $address) {
+            foreach ($addresses as $address) {
                 $urls[] = sprintf(
                     '%s://%s:%s',
                     $protocol,
@@ -558,22 +689,24 @@ class Agent extends CommonDBTM
      */
     public function requestAgent($endpoint): Response
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
-        if (self::$found_adress !== false) {
-            $adresses = [self::$found_adress];
+        if (self::$found_address !== false) {
+            $addresses = [self::$found_address];
         } else {
-            $adresses = $this->getAgentURLs();
+            $addresses = $this->getAgentURLs();
         }
 
+        $exception = null;
         $response = null;
-        foreach ($adresses as $adress) {
+        foreach ($addresses as $address) {
             $options = [
-                'base_uri'        => sprintf('%s/%s', $adress, $endpoint),
+                'base_uri'        => $address,
                 'connect_timeout' => self::TIMEOUT,
             ];
 
-           // add proxy string if configured in glpi
+            // add proxy string if configured in glpi
             if (!empty($CFG_GLPI["proxy_name"])) {
                 $proxy_creds      = !empty($CFG_GLPI["proxy_user"])
                 ? $CFG_GLPI["proxy_user"] . ":" . (new GLPIKey())->decrypt($CFG_GLPI["proxy_passwd"]) . "@"
@@ -582,21 +715,23 @@ class Agent extends CommonDBTM
                 $options['proxy'] = $proxy_string;
             }
 
-           // init guzzle client with base options
+            // init guzzle client with base options
             $httpClient = new Guzzle_Client($options);
             try {
                 $response = $httpClient->request('GET', $endpoint, []);
-                self::$found_adress = $adress;
+                self::$found_address = $address;
                 break;
-            } catch (Exception $e) {
-                //many adresses will be incorrect
-                $cs = true;
+            } catch (\GuzzleHttp\Exception\RequestException $exception) {
+                // got an error response, we don't need to try other addresses
+                break;
+            } catch (\Throwable $exception) {
+                // many addresses will be incorrect
             }
         }
 
-        if (!$response) {
+        if ($response === null && $exception !== null) {
             // throw last exception on no response
-            throw $e;
+            throw $exception;
         }
 
         return $response;
@@ -609,16 +744,16 @@ class Agent extends CommonDBTM
      */
     public function requestStatus()
     {
-       //must return json
+        // must return json
         try {
             $response = $this->requestAgent('status');
             return $this->handleAgentResponse($response, self::ACTION_STATUS);
         } catch (\GuzzleHttp\Exception\ClientException $e) {
             ErrorHandler::getInstance()->handleException($e);
-           //not authorized
+            // not authorized
             return ['answer' => __('Not allowed')];
-        } catch (Exception $e) {
-           //no response
+        } catch (\Throwable $e) {
+            // no response
             return ['answer' => __('Unknown')];
         }
     }
@@ -630,16 +765,16 @@ class Agent extends CommonDBTM
      */
     public function requestInventory()
     {
-       //must return json
+        // must return json
         try {
             $this->requestAgent('now');
             return $this->handleAgentResponse(new Response(), self::ACTION_INVENTORY);
         } catch (\GuzzleHttp\Exception\ClientException $e) {
             ErrorHandler::getInstance()->handleException($e);
-           //not authorized
+            // not authorized
             return ['answer' => __('Not allowed')];
-        } catch (Exception $e) {
-           //no response
+        } catch (\Throwable $e) {
+            // no response
             return ['answer' => __('Unknown')];
         }
     }
@@ -685,58 +820,125 @@ class Agent extends CommonDBTM
      * Cron task: clean and do other defined actions when agent not have been contacted
      * the server since xx days
      *
-     * @global object $DB
+     * @global object $DB, $PLUGIN_HOOKS
      * @param object $task
-     * @return boolean true if successful, otherwise false
+     * @return int
+     *
      * @copyright 2010-2022 by the FusionInventory Development Team.
      */
     public static function cronCleanoldagents($task = null)
     {
-        global $DB;
+        /**
+         * @var \DBmysql $DB
+         * @var array $PLUGIN_HOOKS
+         */
+        global $DB, $PLUGIN_HOOKS;
 
         $config = \Config::getConfigurationValues('inventory');
 
         $retention_time = $config['stale_agents_delay'] ?? 0;
         if ($retention_time <= 0) {
-            return true;
+            return 0;
         }
 
+        $total  = 0;
+        $errors = 0;
+
         $iterator = $DB->request([
+            'SELECT' => ['id'],
             'FROM' => self::getTable(),
             'WHERE' => [
                 'last_contact' => ['<', new QueryExpression("date_add(now(), interval -" . $retention_time . " day)")]
             ]
         ]);
 
-        $cron_status = false;
-        if (count($iterator)) {
-            $action = (int)($config['stale_agents_action'] ?? Conf::STALE_AGENT_ACTION_CLEAN);
-            if ($action === Conf::STALE_AGENT_ACTION_CLEAN) {
-                //delete agents
-                $agent = new self();
-                foreach ($iterator as $data) {
-                    $agent->delete($data);
-                    $task->addVolume(1);
-                    $cron_status = true;
-                }
-            } else if ($action === Conf::STALE_AGENT_ACTION_STATUS && isset($config['stale_agents_status'])) {
-                //change status of agents linked assets
-                foreach ($iterator as $data) {
-                    $itemtype = $data['itemtype'];
-                    if (is_subclass_of($itemtype, CommonDBTM::class)) {
-                        $item = new $itemtype();
-                        if ($item->getFromDB($data['items_id'])) {
-                            $item->update([
-                                'id' => $data['items_id'],
-                                'states_id' => $config['agents_status']
-                            ]);
+        foreach ($iterator as $data) {
+            $agent = new self();
+            if (!$agent->getFromDB($data['id'])) {
+                $errors++;
+                continue;
+            }
+
+            $item = is_a($agent->fields['itemtype'], CommonDBTM::class, true) ? new $agent->fields['itemtype']() : null;
+            if (
+                $item !== null
+                && (
+                    $item->getFromDB($agent->fields['items_id']) === false
+                    || $item->fields['is_dynamic'] != 1
+                )
+            ) {
+                $item = null;
+            }
+
+            $actions = importArrayFromDB($config['stale_agents_action']);
+            foreach ($actions as $action) {
+                switch ($action) {
+                    case Conf::STALE_AGENT_ACTION_CLEAN:
+                        //delete agents
+                        if ($agent->delete($data)) {
                             $task->addVolume(1);
-                            $cron_status = true;
+                            $total++;
+                        } else {
+                            $errors++;
+                        }
+                        break;
+                    case Conf::STALE_AGENT_ACTION_STATUS:
+                        if (isset($config['stale_agents_status']) && $item !== null) {
+                            //change status of agents linked assets
+                            $input = [
+                                'id'        => $item->fields['id'],
+                                'states_id' => $config['stale_agents_status'],
+                                'is_dynamic' => 1
+                            ];
+                            if ($item->update($input)) {
+                                $task->addVolume(1);
+                                $total++;
+                            } else {
+                                $errors++;
+                            }
+                        }
+                        break;
+                    case Conf::STALE_AGENT_ACTION_TRASHBIN:
+                        //put linked assets in trashbin
+                        if ($item !== null) {
+                            if ($item->delete(['id' => $item->fields['id']])) {
+                                $task->addVolume(1);
+                                $total++;
+                            } else {
+                                $errors++;
+                            }
+                        }
+                        break;
+                }
+            }
+
+            $plugin_actions = $PLUGIN_HOOKS[Hooks::STALE_AGENT_CONFIG] ?? [];
+            /**
+             * @var string $plugin
+             * @phpstan-var array{label: string, item_action: boolean, render_callback: callable, action_callback: callable}[] $actions
+             */
+            foreach ($plugin_actions as $plugin => $actions) {
+                if (is_array($actions) && Plugin::isPluginActive($plugin)) {
+                    foreach ($actions as $action) {
+                        if (!is_callable($action['action_callback'] ?? null)) {
+                            trigger_error(
+                                sprintf('Invalid plugin "%s" action callback for "%s" hook.', $plugin, Hooks::STALE_AGENT_CONFIG),
+                                E_USER_WARNING
+                            );
+                            continue;
+                        }
+                        // Run the action
+                        if ($action['action_callback']($agent, $config, $item)) {
+                            $task->addVolume(1);
+                            $total++;
+                        } else {
+                            $errors++;
                         }
                     }
                 }
             }
         }
-        return $cron_status;
+
+        return $errors > 0 ? -1 : ($total > 0 ? 1 : 0);
     }
 }

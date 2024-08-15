@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -97,29 +97,6 @@ class NetworkEquipment extends CommonDBTM
 
 
     /**
-     * @since 0.84
-     *
-     * @see CommonDBTM::cleanDBonPurge()
-     **/
-    public function cleanDBonPurge()
-    {
-
-        $this->deleteChildrenAndRelationsFromDb(
-            [
-                Certificate_Item::class,
-                Item_Project::class,
-            ]
-        );
-
-        Item_Devices::cleanItemDeviceDBOnItemDelete(
-            $this->getType(),
-            $this->fields['id'],
-            (!empty($this->input['keep_devices']))
-        );
-    }
-
-
-    /**
      * @see CommonDBTM::useDeletedToLockIfDynamic()
      *
      * @since 0.84
@@ -187,6 +164,7 @@ class NetworkEquipment extends CommonDBTM
      **/
     public function canUnrecurs()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $ID = $this->fields['id'];
@@ -244,6 +222,9 @@ class NetworkEquipment extends CommonDBTM
                     if ($item = getItemForItemtype($data["itemtype"])) {
                         // For each itemtype which are entity dependant
                         if ($item->isEntityAssign()) {
+                            if (count($ids = explode(',', $data["ids"])) > 1) {
+                                $data["ids"] = $ids;
+                            }
                             if (
                                 countElementsInTable($itemtable, ['id' => $data["ids"],
                                     'NOT' => ['entities_id' => $entities ]
@@ -378,6 +359,14 @@ class NetworkEquipment extends CommonDBTM
         ];
 
         $tab[] = [
+            'id'                 => '73',
+            'table'              => 'glpi_snmpcredentials',
+            'field'              => 'name',
+            'name'               => SNMPCredential::getTypeName(1),
+            'datatype'           => 'dropdown'
+        ];
+
+        $tab[] = [
             'id'                 => '19',
             'table'              => $this->getTable(),
             'field'              => 'date_mod',
@@ -424,6 +413,14 @@ class NetworkEquipment extends CommonDBTM
         ];
 
         $tab[] = [
+            'id'                 => '12',
+            'table'              => $this->getTable(),
+            'field'              => 'uuid',
+            'name'               => __('UUID'),
+            'datatype'           => 'string',
+        ];
+
+        $tab[] = [
             'id'                 => '14',
             'table'              => $this->getTable(),
             'field'              => 'ram',
@@ -452,7 +449,7 @@ class NetworkEquipment extends CommonDBTM
             'table'              => 'glpi_users',
             'field'              => 'name',
             'linkfield'          => 'users_id_tech',
-            'name'               => __('Technician in charge of the hardware'),
+            'name'               => __('Technician in charge'),
             'datatype'           => 'dropdown',
             'right'              => 'own_ticket'
         ];
@@ -462,7 +459,7 @@ class NetworkEquipment extends CommonDBTM
             'table'              => 'glpi_groups',
             'field'              => 'completename',
             'linkfield'          => 'groups_id_tech',
-            'name'               => __('Group in charge of the hardware'),
+            'name'               => __('Group in charge'),
             'condition'          => ['is_assign' => 1],
             'datatype'           => 'dropdown'
         ];
@@ -507,7 +504,11 @@ class NetworkEquipment extends CommonDBTM
 
         $tab = array_merge($tab, Rack::rawSearchOptionsToAdd(get_class($this)));
 
-        $tab = array_merge($tab, Socket::rawSearchOptionsToAdd(get_class($this)));
+        $tab = array_merge($tab, Socket::rawSearchOptionsToAdd());
+
+        $tab = array_merge($tab, SNMPCredential::rawSearchOptionsToAdd());
+
+        $tab = array_merge($tab, DCRoom::rawSearchOptionsToAdd());
 
         return $tab;
     }

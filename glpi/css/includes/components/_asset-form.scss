@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -31,7 +31,8 @@
  * ---------------------------------------------------------------------
  */
 
-.asset {
+.asset,
+.navigationheader {
     .card-header {
         background-color: $header-bg;
         color: $header-fg;
@@ -52,6 +53,13 @@
 
         .badge .ribbon {
             left: 0.5rem;
+        }
+
+        // remove margin-left is small screen
+        @include media-breakpoint-down(sm) {
+            .badge {
+                margin-left: 0 !important;
+            }
         }
     }
 
@@ -76,4 +84,21 @@
 
 #page > .asset {
     margin-top: 15px; // Fix top of form when embedded in iframe (Usually positioned properly because of .tab-content)
+}
+
+.navigationheader {
+    .main-header {
+        padding-top: 0;
+        padding-bottom: 0;
+
+        .ribbon {
+            position: relative;
+            left: -0.25rem;
+        }
+    }
+
+    .card-header {
+        background-color: transparent !important;
+        border-color: transparent !important;
+    }
 }

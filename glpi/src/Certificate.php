@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -247,7 +247,7 @@ class Certificate extends CommonDBTM
             'table'              => 'glpi_users',
             'field'              => 'name',
             'linkfield'          => 'users_id_tech',
-            'name'               => __('Technician in charge of the hardware'),
+            'name'               => __('Technician in charge'),
             'datatype'           => 'dropdown',
             'right'              => 'own_ticket'
         ];
@@ -266,7 +266,7 @@ class Certificate extends CommonDBTM
             'table'              => 'glpi_groups',
             'field'              => 'completename',
             'linkfield'          => 'groups_id_tech',
-            'name'               => __('Group in charge of the hardware'),
+            'name'               => __('Group in charge'),
             'condition'          => ['is_assign' => 1],
             'datatype'           => 'dropdown'
         ];
@@ -497,6 +497,29 @@ class Certificate extends CommonDBTM
     public function showForm($ID, array $options = [])
     {
         $this->initForm($ID, $options);
+
+        $class = "";
+
+        if (!$this->isNewItem()) {
+            //use send_certificates_alert_before_delay to compute color
+            if ($before = Entity::getUsedConfig('send_certificates_alert_before_delay', $_SESSION['glpiactive_entity'])) {
+                if ($this->fields['date_expiration'] < date('Y-m-d')) {
+                    $class = 'expired';
+                } elseif ($this->fields['date_expiration'] < date('Y-m-d', strtotime("+ $before days"))) {
+                    $class = 'soon_expired';
+                } else {
+                    $class = "not_expired";
+                }
+            } else { // standard color compute
+                if ($this->fields['date_expiration'] < date('Y-m-d')) {
+                    $class = 'warn';
+                }
+            }
+        }
+
+
+
+        $options['expiration_class'] = $class;
         TemplateRenderer::getInstance()->display('pages/management/certificate.html.twig', [
             'item'   => $this,
             'params' => $options,
@@ -643,6 +666,7 @@ class Certificate extends CommonDBTM
      **/
     public static function getTypes($all = false)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $types = $CFG_GLPI['certificate_types'];
@@ -679,7 +703,11 @@ class Certificate extends CommonDBTM
      **/
     public static function cronCertificate($task = null)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         if (!$CFG_GLPI['use_notifications']) {
             return 0; // Nothing to do
@@ -809,7 +837,7 @@ class Certificate extends CommonDBTM
     }
 
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
         $this->cleanAlerts([Alert::END]);
         parent::post_updateItem($history);

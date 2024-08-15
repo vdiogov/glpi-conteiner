@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -116,7 +116,7 @@ class MassiveAction
      * Items remaining in current process.
      * @var array
      */
-    private $remainings = [];
+    private $remainings = null;
 
     /**
      * Fields to remove after reload.
@@ -189,6 +189,7 @@ class MassiveAction
      **/
     public function __construct(array $POST, array $GET, $stage, ?int $items_id = null)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!empty($POST)) {
@@ -232,7 +233,7 @@ class MassiveAction
                             foreach ($ids as $id => $checked) {
                                 if ($checked == 1) {
                                     $items[$id] = $id;
-                                    $this->nb_items ++;
+                                    $this->nb_items++;
                                 }
                             }
                              $POST['items'][$itemtype] = $items;
@@ -403,7 +404,9 @@ class MassiveAction
 
        // Add process elements
         if ($stage == 'process') {
-            $this->remainings = $this->items;
+            if (!isset($this->remainings)) {
+                $this->remainings = $this->items;
+            }
 
             $this->fields_to_remove_when_reload = ['fields_to_remove_when_reload'];
 
@@ -522,7 +525,7 @@ class MassiveAction
     /**
      * Get current action
      *
-     * @return a string with the current action or NULL if we are at initial stage
+     * @return string with the current action or NULL if we are at initial stage
      **/
     public function getAction()
     {
@@ -568,7 +571,7 @@ class MassiveAction
      **/
     public function getRemainings()
     {
-        return $this->remainings;
+        return $this->remainings ?? [];
     }
 
 
@@ -707,14 +710,15 @@ class MassiveAction
      * Get the standard massive actions
      *
      * @param string|CommonDBTM $item        the item for which we want the massive actions
-     * @param boolean           $is_deleted  massive action for deleted items ?   (default 0)
+     * @param boolean           $is_deleted  massive action for deleted items ?   (default false)
      * @param CommonDBTM        $checkitem   link item to check right              (default NULL)
      * @param int|null          $items_id    Get actions for a single item
      *
      * @return array|false Array of massive actions or false if $item is not valid
      **/
-    public static function getAllMassiveActions($item, $is_deleted = 0, CommonDBTM $checkitem = null, ?int $items_id = null)
+    public static function getAllMassiveActions($item, $is_deleted = false, CommonDBTM $checkitem = null, ?int $items_id = null)
     {
+        /** @var array $PLUGIN_HOOKS */
         global $PLUGIN_HOOKS;
 
         if (is_string($item)) {
@@ -732,10 +736,12 @@ class MassiveAction
             $canupdate = $checkitem->canUpdate();
             $candelete = $checkitem->canDelete();
             $canpurge  = $checkitem->canPurge();
+            $cancreate = $checkitem->canCreate();
         } else {
             $canupdate = $itemtype::canUpdate();
             $candelete = $itemtype::canDelete();
             $canpurge  = $itemtype::canPurge();
+            $cancreate = $itemtype::canCreate();
         }
 
         $actions   = [];
@@ -764,7 +770,7 @@ class MassiveAction
                //TRANS: select action 'update' (before doing it)
                 $actions[$self_pref . 'update'] = _x('button', 'Update');
 
-                if (Toolbox::hasTrait($itemtype, Clonable::class)) {
+                if ($cancreate && Toolbox::hasTrait($itemtype, Clonable::class)) {
                     $actions[$self_pref . 'clone'] = "<i class='fa-fw far fa-clone'></i>" . _x('button', 'Clone');
                 }
             }
@@ -925,6 +931,10 @@ class MassiveAction
 
     public static function showMassiveActionsSubForm(MassiveAction $ma)
     {
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
         global $CFG_GLPI, $DB;
 
         switch ($ma->getAction()) {
@@ -932,7 +942,7 @@ class MassiveAction
                 if (!isset($ma->POST['id_field'])) {
                     $itemtypes        = array_keys($ma->items);
                     $options_per_type = [];
-                    $options_counts   = [];
+                    $options_count   = [];
                     foreach ($itemtypes as $itemtype) {
                         $options_per_type[$itemtype] = [];
                         $group                       = '';
@@ -993,6 +1003,8 @@ class MassiveAction
                         }
                     }
 
+                    $options = [];
+                    $itemtype_choices = [];
                     if (count($itemtypes) > 1) {
                         $common_options = [];
                         foreach ($options_count as $field => $users) {
@@ -1319,6 +1331,10 @@ class MassiveAction
      **/
     public function updateProgressBars()
     {
+        if (isAPI()) {
+            // No progress bar on API
+            return;
+        }
 
         if ($this->timer->getTime() > 1) {
            // If the action's delay is more than one second, the display progress bars
@@ -1412,6 +1428,7 @@ class MassiveAction
         CommonDBTM $item,
         array $ids
     ) {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $action = $ma->getAction();
@@ -1516,11 +1533,13 @@ class MassiveAction
                     if (Search::isInfocomOption($item->getType(), $index)) {
                         $ic               = new Infocom();
                         $link_entity_type = -1;
+                        $is_recursive     = 0;
                        /// Specific entity item
                         if ($searchopt[$index]["table"] == "glpi_suppliers") {
                              $ent = new Supplier();
                             if ($ent->getFromDB($input[$input["field"]])) {
                                 $link_entity_type = $ent->fields["entities_id"];
+                                $is_recursive     = $ent->fields["is_recursive"];
                             }
                         }
                         foreach ($ids as $key) {
@@ -1528,7 +1547,7 @@ class MassiveAction
                                 if (
                                     ($link_entity_type < 0)
                                     || ($link_entity_type == $item->getEntityID())
-                                    || ($ent->fields["is_recursive"]
+                                    || ($is_recursive
                                     && in_array(
                                         $link_entity_type,
                                         getAncestorsOf(

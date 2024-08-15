@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -40,11 +40,6 @@ use Glpi\Inventory\Conf;
 
 class Processor extends Device
 {
-    public function __construct(CommonDBTM $item, array $data = null)
-    {
-        parent::__construct($item, $data, 'Item_DeviceProcessor');
-    }
-
     public function prepare(): array
     {
         $mapping = [
@@ -65,6 +60,10 @@ class Processor extends Device
             if (property_exists($val, 'frequency')) {
                 $val->frequency_default = $val->frequency;
                 $val->frequence = $val->frequency;
+            } else {
+                $val->frequency_default = 0;
+                $val->frequency = 0;
+                $val->frequence = 0;
             }
             if (property_exists($val, 'type')) {
                 $val->designation = $val->type;
@@ -78,5 +77,10 @@ class Processor extends Device
     public function checkConf(Conf $conf): bool
     {
         return $conf->component_processor == 1;
+    }
+
+    public function getItemtype(): string
+    {
+        return \Item_DeviceProcessor::class;
     }
 }

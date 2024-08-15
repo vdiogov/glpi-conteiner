@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -151,6 +151,7 @@ $empty_data_builder = new class
             'cas_port' => '443',
             'cas_uri' => '',
             'cas_logout' => '',
+            'cas_version' => 'CAS_VERSION_2_0',
             'existing_auth_server_field_clean_domain' => '0',
             'planning_begin' => '08:00:00',
             'planning_end' => '20:00:00',
@@ -172,6 +173,11 @@ $empty_data_builder = new class
             'smtp_host' => '',
             'smtp_port' => '25',
             'smtp_username' => '',
+            'smtp_oauth_provider' => '',
+            'smtp_oauth_client_id' => '',
+            'smtp_oauth_client_secret' => '',
+            'smtp_oauth_options' => '{}',
+            'smtp_oauth_refresh_token' => '',
             'proxy_name' => '',
             'proxy_port' => '8080',
             'proxy_user' => '',
@@ -199,6 +205,7 @@ $empty_data_builder = new class
             'is_location_autoclean' => '0',
             'state_autoclean_mode' => '0',
             'use_flat_dropdowntree' => '0',
+            'use_flat_dropdowntree_on_search_result' => '1',
             'use_autoname_by_entity' => '1',
             'softwarecategories_id_ondelete' => '1',
             'x509_email_field' => '',
@@ -264,7 +271,7 @@ $empty_data_builder = new class
             'translate_kb' => '0',
             'translate_dropdowns' => '0',
             'translate_reminders' => '0',
-            'pdffont' => 'helvetica',
+            'pdffont' => 'dejavusans',
             'keep_devices_when_purging_item' => '0',
             'maintenance_mode' => '0',
             'maintenance_text' => '',
@@ -278,7 +285,7 @@ $empty_data_builder = new class
             'savedsearches_pinned' => '0',
             'timeline_order' => 'natural',
             'itil_layout' => '',
-            'richtext_layout' => 'inline',
+            'richtext_layout' => 'classic',
             'lock_use_lock_item' => '0',
             'lock_autolock_mode' => '1',
             'lock_directunlock_notification' => '0',
@@ -302,8 +309,6 @@ $empty_data_builder = new class
             'dbversion' => 'FILLED AT INSTALL',
             'smtp_max_retries' => '5',
             'smtp_sender' => null,
-            'from_email' => null,
-            'from_email_name' => null,
             'instance_uuid' => null,
             'registration_uuid' => null,
             'smtp_retry_time' => '5',
@@ -344,8 +349,11 @@ $empty_data_builder = new class
             // Default size corresponds to the 'upload_max_filesize' directive in Mio (rounded down) or 1 Mio if 'upload_max_filesize' is too low.
             'document_max_size' => max(1, floor(Toolbox::return_bytes_from_ini_vars(ini_get('upload_max_filesize')) / 1024 / 1024)),
             'planning_work_days' => exportArrayToDB([0, 1, 2, 3, 4, 5, 6]),
-            'system_user' => 6,
+            'system_user' => self::USER_SYSTEM,
             'support_legacy_data' => 0, // New installation should not support legacy data
+            'initialized_rules_collections' => '[]',
+            'timeline_action_btn_layout' => 0,
+            'timeline_date_format' => 0,
         ];
 
         $tables['glpi_configs'] = [];
@@ -357,7 +365,7 @@ $empty_data_builder = new class
             ];
         }
 
-        foreach (\Glpi\Inventory\Conf::$defaults as $name => $value) {
+        foreach (\Glpi\Inventory\Conf::getDefaults() as $name => $value) {
             $tables['glpi_configs'][] = [
                 'context' => 'inventory',
                 'name' => $name,
@@ -1602,27 +1610,27 @@ $empty_data_builder = new class
                 'num' => '5',
                 'rank' => '3',
             ], [
-                'itemtype' => 'QueueMail',
+                'itemtype' => 'QueuedNotification',
                 'num' => '16',
                 'rank' => '1',
             ], [
-                'itemtype' => 'QueueMail',
+                'itemtype' => 'QueuedNotification',
                 'num' => '7',
                 'rank' => '2',
             ], [
-                'itemtype' => 'QueueMail',
+                'itemtype' => 'QueuedNotification',
                 'num' => '20',
                 'rank' => '3',
             ], [
-                'itemtype' => 'QueueMail',
+                'itemtype' => 'QueuedNotification',
                 'num' => '21',
                 'rank' => '4',
             ], [
-                'itemtype' => 'QueueMail',
+                'itemtype' => 'QueuedNotification',
                 'num' => '22',
                 'rank' => '5',
             ], [
-                'itemtype' => 'QueueMail',
+                'itemtype' => 'QueuedNotification',
                 'num' => '15',
                 'rank' => '6',
             ], [
@@ -1795,7 +1803,7 @@ $empty_data_builder = new class
         $ADDTODISPLAYPREF['Lockedfield'] = [3, 13, 5];
         $ADDTODISPLAYPREF['Unmanaged'] = [2, 4, 3, 5, 7, 10, 18, 14, 15, 9];
         $ADDTODISPLAYPREF['NetworkPortType'] = [10, 11, 12];
-        $ADDTODISPLAYPREF['NetworkPort'] = [3, 30, 31, 32, 33, 34, 35, 36, 38, 39, 40];
+        $ADDTODISPLAYPREF['NetworkPort'] = [3, 30, 31, 32, 33, 34, 35, 36, 38, 39, 40, 6];
         $ADDTODISPLAYPREF['USBVendor'] = [10, 11];
         $ADDTODISPLAYPREF['PCIVendor'] = [10, 11];
         $ADDTODISPLAYPREF['Agent'] = [2, 4, 10, 8, 11, 6, 15];
@@ -2198,7 +2206,11 @@ $empty_data_builder = new class
                 'use_infocoms_alert' => 0,
                 'send_infocoms_alert_before_delay' => 0,
                 'use_reservations_alert' => 0,
+                'use_domains_alert' => 0,
+                'send_domains_alert_close_expiries_delay' => 30,
+                'send_domains_alert_expired_delay' => 1,
                 'autoclose_delay' => -10,
+                'autopurge_delay' => -10,
                 'notclosed_delay' => 0,
                 'calendars_strategy' => 0,
                 'auto_assign_mode' => -10,
@@ -2856,7 +2868,7 @@ $empty_data_builder = new class
                 'is_active' => 1,
             ], [
                 'id' => 72,
-                'name' => 'New user mentionned',
+                'name' => 'New user mentioned',
                 'itemtype' => 'Ticket',
                 'event' => 'user_mention',
                 'is_recursive' => 1,
@@ -4887,11 +4899,14 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
 
 ##FOREACHplugins##
 ##plugin.name## :##plugin.old_version## -&gt; ##plugin.version##
-##ENDFOREACHplugins##',
+##ENDFOREACHplugins##
+
+##lang.marketplace.url## : ##marketplace.url##',
                 'content_html' => '&lt;p&gt;##lang.plugins_updates_available##&lt;/p&gt;
 &lt;ul&gt;##FOREACHplugins##
 &lt;li&gt;##plugin.name## :##plugin.old_version## -&gt; ##plugin.version##&lt;/li&gt;
-##ENDFOREACHplugins##&lt;/ul&gt;'
+##ENDFOREACHplugins##&lt;/ul&gt;
+&lt;p&gt;##lang.marketplace.url## : &lt;a title="##lang.marketplace.url##" href="##marketplace.url##" target="_blank" rel="noopener"&gt;##marketplace.url##&lt;/a&gt;&lt;/p&gt;'
             ],
         ];
 
@@ -5019,7 +5034,7 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_SUPERVISOR,
                 'name' => 'domain',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | DELETE | PURGE,
             ], [
                 'profiles_id' => self::PROFILE_SELF_SERVICE,
                 'name' => 'profile',
@@ -5323,11 +5338,11 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_OBSERVER,
                 'name' => 'reminder_public',
-                'rights' => READ,
+                'rights' => READ | Reminder::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_OBSERVER,
                 'name' => 'rssfeed_public',
-                'rights' => READ,
+                'rights' => READ | RSSFeed::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_OBSERVER,
                 'name' => 'bookmark_public',
@@ -5619,11 +5634,11 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_ADMIN,
                 'name' => 'reminder_public',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | PURGE | Reminder::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_ADMIN,
                 'name' => 'rssfeed_public',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | PURGE | RSSFeed::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_ADMIN,
                 'name' => 'bookmark_public',
@@ -5670,7 +5685,7 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_SUPERVISOR,
                 'name' => 'cable_management',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | DELETE | PURGE,
             ], [
                 'profiles_id' => self::PROFILE_ADMIN,
                 'name' => 'statistic',
@@ -5888,7 +5903,7 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_SUPER_ADMIN,
                 'name' => 'domain',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | DELETE | PURGE,
             ], [
                 'profiles_id' => self::PROFILE_SUPER_ADMIN,
                 'name' => 'profile',
@@ -5916,11 +5931,11 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_SUPER_ADMIN,
                 'name' => 'reminder_public',
-                'rights' => ALLSTANDARDRIGHT | UNLOCK,
+                'rights' => ALLSTANDARDRIGHT | UNLOCK | Reminder::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_SUPER_ADMIN,
                 'name' => 'rssfeed_public',
-                'rights' => ALLSTANDARDRIGHT | UNLOCK,
+                'rights' => ALLSTANDARDRIGHT | UNLOCK | RSSFeed::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_SUPER_ADMIN,
                 'name' => 'bookmark_public',
@@ -6187,7 +6202,7 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_ADMIN,
                 'name' => 'domain',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | DELETE | PURGE,
             ], [
                 'profiles_id' => self::PROFILE_HOTLINER,
                 'name' => 'profile',
@@ -6215,11 +6230,11 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_HOTLINER,
                 'name' => 'reminder_public',
-                'rights' => self::RIGHT_NONE,
+                'rights' => self::RIGHT_NONE | Reminder::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_HOTLINER,
                 'name' => 'rssfeed_public',
-                'rights' => self::RIGHT_NONE,
+                'rights' => self::RIGHT_NONE | RSSFeed::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_HOTLINER,
                 'name' => 'bookmark_public',
@@ -6500,11 +6515,11 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_TECHNICIAN,
                 'name' => 'reminder_public',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | PURGE | Reminder::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_TECHNICIAN,
                 'name' => 'rssfeed_public',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | PURGE | RSSFeed::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_TECHNICIAN,
                 'name' => 'bookmark_public',
@@ -6551,7 +6566,7 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_SUPER_ADMIN,
                 'name' => 'cable_management',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | DELETE | PURGE,
             ], [
                 'profiles_id' => self::PROFILE_TECHNICIAN,
                 'name' => 'statistic',
@@ -6791,11 +6806,11 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_SUPERVISOR,
                 'name' => 'reminder_public',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | PURGE | Reminder::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_SUPERVISOR,
                 'name' => 'rssfeed_public',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | PURGE | RSSFeed::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_SUPERVISOR,
                 'name' => 'bookmark_public',
@@ -6834,7 +6849,7 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_ADMIN,
                 'name' => 'cable_management',
-                'rights' => READ | UPDATE | CREATE | PURGE,
+                'rights' => READ | UPDATE | CREATE | DELETE | PURGE,
             ], [
                 'profiles_id' => self::PROFILE_SUPERVISOR,
                 'name' => 'statistic',
@@ -7106,11 +7121,11 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ], [
                 'profiles_id' => self::PROFILE_READ_ONLY,
                 'name' => 'reservation',
-                'rights' => READ,
+                'rights' => READ | Reminder::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_READ_ONLY,
                 'name' => 'rssfeed_public',
-                'rights' => READ,
+                'rights' => READ | RSSFeed::PERSONAL,
             ], [
                 'profiles_id' => self::PROFILE_READ_ONLY,
                 'name' => 'rule_dictionnary_dropdown',
@@ -7768,6 +7783,212 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
                 'name' => 'recurrentchange',
                 'rights' => READ,
             ],
+            [
+                'profiles_id' => self::PROFILE_SELF_SERVICE,
+                'name' => 'locked_field',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_OBSERVER,
+                'name' => 'locked_field',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_ADMIN,
+                'name' => 'locked_field',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SUPER_ADMIN,
+                'name' => 'locked_field',
+                'rights' => CREATE | UPDATE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_HOTLINER,
+                'name' => 'locked_field',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_TECHNICIAN,
+                'name' => 'locked_field',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SUPERVISOR,
+                'name' => 'locked_field',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_READ_ONLY,
+                'name' => 'locked_field',
+                'rights' => self::RIGHT_NONE,
+            ],            [
+                'profiles_id' => self::PROFILE_SELF_SERVICE,
+                'name' => 'snmpcredential',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_OBSERVER,
+                'name' => 'snmpcredential',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_ADMIN,
+                'name' => 'snmpcredential',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SUPER_ADMIN,
+                'name' => 'snmpcredential',
+                'rights' => ALLSTANDARDRIGHT,
+            ],
+            [
+                'profiles_id' => self::PROFILE_HOTLINER,
+                'name' => 'snmpcredential',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_TECHNICIAN,
+                'name' => 'snmpcredential',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SUPERVISOR,
+                'name' => 'snmpcredential',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_READ_ONLY,
+                'name' => 'snmpcredential',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SELF_SERVICE,
+                'name' => 'refusedequipment',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_OBSERVER,
+                'name' => 'refusedequipment',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_ADMIN,
+                'name' => 'refusedequipment',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SUPER_ADMIN,
+                'name' => 'refusedequipment',
+                'rights' => READ | UPDATE | PURGE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_HOTLINER,
+                'name' => 'refusedequipment',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_TECHNICIAN,
+                'name' => 'refusedequipment',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SUPERVISOR,
+                'name' => 'refusedequipment',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_READ_ONLY,
+                'name' => 'refusedequipment',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SELF_SERVICE,
+                'name' => 'agent',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_OBSERVER,
+                'name' => 'agent',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_ADMIN,
+                'name' => 'agent',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SUPER_ADMIN,
+                'name' => 'agent',
+                'rights' => READ | UPDATE | PURGE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_HOTLINER,
+                'name' => 'agent',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_TECHNICIAN,
+                'name' => 'agent',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SUPERVISOR,
+                'name' => 'agent',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_READ_ONLY,
+                'name' => 'agent',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SELF_SERVICE,
+                'name' => 'unmanaged',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_OBSERVER,
+                'name' => 'unmanaged',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_ADMIN,
+                'name' => 'unmanaged',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SUPER_ADMIN,
+                'name' => 'unmanaged',
+                'rights' => READ | UPDATE | DELETE | PURGE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_HOTLINER,
+                'name' => 'unmanaged',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_TECHNICIAN,
+                'name' => 'unmanaged',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_SUPERVISOR,
+                'name' => 'unmanaged',
+                'rights' => self::RIGHT_NONE,
+            ],
+            [
+                'profiles_id' => self::PROFILE_READ_ONLY,
+                'name' => 'unmanaged',
+                'rights' => self::RIGHT_NONE,
+
+            ],
+            [
+                'profiles_id' => self::PROFILE_SUPER_ADMIN,
+                'name' => 'system_logs',
+                'rights' => READ,
+
+            ],
         ];
 
 
@@ -7984,188 +8205,6 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
             ],
         ];
 
-        $tables['glpi_ruleactions'] = [
-            [
-                'id' => '6',
-                'rules_id' => '6',
-                'action_type' => 'fromitem',
-                'field' => 'locations_id',
-                'value' => '1',
-            ], [
-                'id' => '2',
-                'rules_id' => '2',
-                'action_type' => 'assign',
-                'field' => 'entities_id',
-                'value' => '0',
-            ], [
-                'id' => '3',
-                'rules_id' => '3',
-                'action_type' => 'assign',
-                'field' => 'entities_id',
-                'value' => '0',
-            ], [
-                'id' => '4',
-                'rules_id' => '4',
-                'action_type' => 'assign',
-                'field' => '_refuse_email_no_response',
-                'value' => '1',
-            ], [
-                'id' => '5',
-                'rules_id' => '5',
-                'action_type' => 'assign',
-                'field' => '_refuse_email_no_response',
-                'value' => '1',
-            ], [
-                'id' => '7',
-                'rules_id' => '7',
-                'action_type' => 'fromuser',
-                'field' => 'locations_id',
-                'value' => '1',
-            ], [
-                'id' => '8',
-                'rules_id' => '8',
-                'action_type' => 'assign',
-                'field' => '_import_category',
-                'value' => '1',
-            ], [
-                'id' => '9',
-                'rules_id' => '9',
-                'action_type' => 'regex_result',
-                'field' => '_affect_user_by_regex',
-                'value' => '#0',
-            ], [
-                'id' => '10',
-                'rules_id' => '10',
-                'action_type' => 'regex_result',
-                'field' => '_affect_user_by_regex',
-                'value' => '#0',
-            ], [
-                'id' => '11',
-                'rules_id' => '11',
-                'action_type' => 'regex_result',
-                'field' => '_affect_user_by_regex',
-                'value' => '#0',
-            ],
-        ];
-
-        $tables['glpi_rulecriterias'] = [
-            [
-                'id' => 9,
-                'rules_id' => 6,
-                'criteria' => 'locations_id',
-                'condition' => 9,
-                'pattern' => 1,
-            ], [
-                'id' => 2,
-                'rules_id' => 2,
-                'criteria' => 'TYPE',
-                'condition' => 0,
-                'pattern' => Auth::LDAP,
-            ], [
-                'id' => 3,
-                'rules_id' => 2,
-                'criteria' => 'TYPE',
-                'condition' => 0,
-                'pattern' => Auth::MAIL,
-            ], [
-                'id' => 5,
-                'rules_id' => 3,
-                'criteria' => 'subject',
-                'condition' => 6,
-                'pattern' => '/.*/',
-            ], [
-                'id' => 6,
-                'rules_id' => 4,
-                'criteria' => 'x-auto-response-suppress',
-                'condition' => 6,
-                'pattern' => '/\\S+/',
-            ], [
-                'id' => 7,
-                'rules_id' => 5,
-                'criteria' => 'auto-submitted',
-                'condition' => '6',
-                'pattern' => '/^(?!.*no).+$/i',
-            ], [
-                'id' => 10,
-                'rules_id' => 6,
-                'criteria' => 'items_locations',
-                'condition' => 8,
-                'pattern' => 1,
-            ], [
-                'id' => 11,
-                'rules_id' => 7,
-                'criteria' => 'locations_id',
-                'condition' => 9,
-                'pattern' => 1,
-            ], [
-                'id' => 12,
-                'rules_id' => 7,
-                'criteria' => '_locations_id_of_requester',
-                'condition' => 8,
-                'pattern' => 1,
-            ], [
-                'id' => 13,
-                'rules_id' => 8,
-                'criteria' => 'name',
-                'condition' => 0,
-                'pattern' => '*',
-            ], [
-                'id' => 14,
-                'rules_id' => 9,
-                'criteria' => '_itemtype',
-                'condition' => 0,
-                'pattern' => 'Computer',
-            ], [
-                'id' => 15,
-                'rules_id' => 9,
-                'criteria' => '_auto',
-                'condition' => 0,
-                'pattern' => 1,
-            ], [
-                'id' => 16,
-                'rules_id' => 9,
-                'criteria' => 'contact',
-                'condition' => 6,
-                'pattern' => '/(.*)@/',
-            ], [
-                'id' => 17,
-                'rules_id' => 10,
-                'criteria' => '_itemtype',
-                'condition' => 0,
-                'pattern' => 'Computer',
-            ], [
-                'id' => 18,
-                'rules_id' => 10,
-                'criteria' => '_auto',
-                'condition' => 0,
-                'pattern' => 1,
-            ], [
-                'id' => 19,
-                'rules_id' => 10,
-                'criteria' => 'contact',
-                'condition' => 6,
-                'pattern' => '/(.*)[,|\\/]/',
-            ], [
-                'id' => 20,
-                'rules_id' => 11,
-                'criteria' => '_itemtype',
-                'condition' => 0,
-                'pattern' => 'Computer',
-            ], [
-                'id' => 21,
-                'rules_id' => 11,
-                'criteria' => '_auto',
-                'condition' => 0,
-                'pattern' => 1,
-            ], [
-                'id' => 22,
-                'rules_id' => 11,
-                'criteria' => 'contact',
-                'condition' => 6,
-                'pattern' => '/(.*)/',
-            ],
-        ];
-
         $tables['glpi_rulerightparameters'] = [
             [
                 'id' => 1,
@@ -8219,120 +8258,6 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
                 'id' => '14',
                 'name' => '(LDAP) MemberOf',
                 'value' => 'memberof',
-            ],
-        ];
-
-        $tables['glpi_rules'] = [
-            [
-                'id' => '2',
-                'sub_type' => 'RuleRight',
-                'ranking' => '1',
-                'name' => 'Root',
-                'description' => '',
-                'match' => 'OR',
-                'is_active' => '1',
-                'is_recursive' => 0,
-                'uuid' => '500717c8-2bd6e957-53a12b5fd35745.02608131',
-                'condition' => 0,
-            ], [
-                'id' => '3',
-                'sub_type' => 'RuleMailCollector',
-                'ranking' => '3',
-                'name' => 'Root',
-                'description' => '',
-                'match' => 'OR',
-                'is_active' => '1',
-                'is_recursive' => '0',
-                'uuid' => '500717c8-2bd6e957-53a12b5fd36404.54713349',
-                'condition' => '0',
-            ], [
-                'id' => '4',
-                'sub_type' => 'RuleMailCollector',
-                'ranking' => '1',
-                'name' => 'X-Auto-Response-Suppress',
-                'description' => 'Exclude Auto-Reply emails using X-Auto-Response-Suppress header',
-                'match' => 'AND',
-                'is_active' => '0',
-                'is_recursive' => '1',
-                'uuid' => '500717c8-2bd6e957-53a12b5fd36d97.94503423',
-                'condition' => '0',
-            ], [
-                'id' => '5',
-                'sub_type' => 'RuleMailCollector',
-                'ranking' => '2',
-                'name' => 'Auto-Reply Auto-Submitted',
-                'description' => 'Exclude Auto-Reply emails using Auto-Submitted header',
-                'match' => 'OR',
-                'is_active' => '1',
-                'is_recursive' => '1',
-                'uuid' => '500717c8-2bd6e957-53a12b5fd376c2.87642651',
-                'condition' => '0',
-            ], [
-                'id' => '6',
-                'sub_type' => 'RuleTicket',
-                'ranking' => '1',
-                'name' => 'Ticket location from item',
-                'description' => '',
-                'match' => 'AND',
-                'is_active' => '0',
-                'is_recursive' => '1',
-                'uuid' => '500717c8-2bd6e957-53a12b5fd37f94.10365341',
-                'condition' => '1',
-            ], [
-                'id' => '7',
-                'sub_type' => 'RuleTicket',
-                'ranking' => '2',
-                'name' => 'Ticket location from user',
-                'description' => '',
-                'match' => 'AND',
-                'is_active' => '0',
-                'is_recursive' => '1',
-                'uuid' => '500717c8-2bd6e957-53a12b5fd38869.86002585',
-                'condition' => '1',
-            ], [
-                'id' => '8',
-                'sub_type' => 'RuleSoftwareCategory',
-                'ranking' => '1',
-                'name' => 'Import category from inventory tool',
-                'description' => '',
-                'match' => 'AND',
-                'is_active' => '0',
-                'is_recursive' => '1',
-                'uuid' => '500717c8-2bd6e957-53a12b5fd38869.86003425',
-                'condition' => '1',
-            ], [
-                'id' => '9',
-                'sub_type' => 'RuleAsset',
-                'ranking' => '1',
-                'name' => 'Domain user assignation',
-                'description' => '',
-                'match' => 'AND',
-                'is_active' => '1',
-                'is_recursive' => '1',
-                'uuid' => 'fbeb1115-7a37b143-5a3a6fc1afdc17.92779763',
-                'condition' => '3',
-            ], [
-                'id' => '10',
-                'sub_type' => 'RuleAsset',
-                'ranking' => '2',
-                'name' => 'Multiple users: assign to the first',
-                'description' => '',
-                'match' => 'AND',
-                'is_active' => '1',
-                'is_recursive' => '1',
-                'uuid' => 'fbeb1115-7a37b143-5a3a6fc1b03762.88595154',
-                'condition' => '3',
-            ], [
-                'id' => '11',
-                'sub_type' => 'RuleAsset',
-                'ranking' => '3',
-                'name' => 'One user assignation',
-                'description' => '',
-                'match' => 'AND',
-                'is_active' => '1',
-                'is_recursive' => '1',
-                'uuid' => 'fbeb1115-7a37b143-5a3a6fc1b073e1.16257440',
-                'condition' => '3',
             ],
         ];
 
@@ -8462,6 +8387,7 @@ style="color: #8b8c8f; font-weight: bold; text-decoration: underline;"&gt;
                 'keep_disk' => 1,
                 'keep_certificate' => 1,
                 'clean_certificate' => 1,
+                'lock_updated_fields' => 0,
             ],
         ];
 

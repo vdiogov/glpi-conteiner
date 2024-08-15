@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -89,12 +89,14 @@ class CleanSoftwareCron extends CommonDBTM
             $max
         );
 
-       // Move software with no versions in the thrashbin
-        $total += self::deleteItems(
-            self::getSoftwareWithNoVersionsCriteria(),
-            new Software(),
-            $max - $total
-        );
+        if ($total < $max) {
+            // Move software with no versions in the thrashbin
+            $total += self::deleteItems(
+                self::getSoftwareWithNoVersionsCriteria(),
+                new Software(),
+                $max - $total
+            );
+        }
 
         return $total;
     }
@@ -130,6 +132,9 @@ class CleanSoftwareCron extends CommonDBTM
                             'id' => new QuerySubQuery([
                                 'SELECT' => 'softwareversions_id',
                                 'FROM'   => Item_SoftwareVersion::getTable(),
+                                'WHERE'  => [
+                                    'is_deleted' => 0,
+                                ],
                             ])
                         ],
                         [
@@ -186,6 +191,7 @@ class CleanSoftwareCron extends CommonDBTM
         CommonDBTM $em,
         int $max
     ): int {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $total = 0;
@@ -201,7 +207,7 @@ class CleanSoftwareCron extends CommonDBTM
             }
 
            // Stop if no items found
-        } while ($count > 0);
+        } while ($count > 0 && $total < $max);
 
         return $total;
     }

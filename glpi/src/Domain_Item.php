@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -169,6 +169,7 @@ class Domain_Item extends CommonDBRelation
      **/
     public static function showForDomain(Domain $domain)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $instID = $domain->fields['id'];
@@ -360,6 +361,7 @@ class Domain_Item extends CommonDBRelation
      */
     public static function showForItem(CommonDBTM $item, $withtemplate = '')
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $ID = $item->getField('id');
@@ -387,6 +389,8 @@ class Domain_Item extends CommonDBRelation
             'SELECT'    => [
                 'glpi_domains_items.id AS assocID',
                 'glpi_domains_items.domainrelations_id',
+                'glpi_domains_items.is_deleted',
+                'glpi_domains_items.is_dynamic',
                 'glpi_entities.id AS entity',
                 'glpi_domains.name AS assocName',
                 'glpi_domains.*'
@@ -420,6 +424,19 @@ class Domain_Item extends CommonDBRelation
             ];
         }
         $criteria['WHERE'] += getEntitiesRestrictCriteria(Domain::getTable(), '', '', true);
+
+        $criteria['WHERE'] +=
+        //deleted and dynamic domain_item are displayed from lock tab
+        //non dynamic domain_item are always displayed
+        [
+            'OR'  => [
+                'AND' => [
+                    "glpi_domains_items.is_deleted" => 0,
+                    "glpi_domains_items.is_dynamic" => 1
+                ],
+                "glpi_domains_items.is_dynamic" => 0
+            ]
+        ];
 
         $iterator = $DB->request($criteria);
 
@@ -529,6 +546,7 @@ class Domain_Item extends CommonDBRelation
         }
         echo "<th>" . __('Creation date') . "</th>";
         echo "<th>" . __('Expiration date') . "</th>";
+        echo "<th>" . __('Dynamic') . "</th>";
         echo "</tr>";
         $used = [];
 
@@ -583,6 +601,7 @@ class Domain_Item extends CommonDBRelation
                 } else {
                     echo "<td class='center'>" . Html::convDate($data["date_expiration"]) . "</td>";
                 }
+                echo "<td class='center'>" . Dropdown::getYesNo($data['is_dynamic']) . "</td>";
                 echo "</tr>";
                 $i++;
             }

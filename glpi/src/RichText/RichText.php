@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -96,6 +96,7 @@ final class RichText
      * @param boolean $keep_presentation      Indicates whether the presentation elements have to be replaced by plaintext equivalents
      * @param boolean $compact                Indicates whether the output should be compact (limited line length, no links URL, ...)
      * @param boolean $encode_output_entities Indicates whether the output should be encoded (encoding of HTML special chars)
+     * @param boolean $preserve_line_breaks   Indicates whether the line breaks should be preserved
      *
      * @return string
      */
@@ -104,8 +105,10 @@ final class RichText
         bool $keep_presentation = true,
         bool $compact = false,
         bool $encode_output_entities = false,
-        bool $preserve_case = false
+        bool $preserve_case = false,
+        bool $preserve_line_breaks = false
     ): string {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $content = self::normalizeHtmlContent($content, false);
@@ -144,10 +147,20 @@ final class RichText
             $config['keep_bad'] = 6; // remove invalid/disallowed tag but keep content intact
             $content = htmLawed($content, $config);
 
-           // Remove supernumeraries whitespaces chars
-            $content = preg_replace('/\s+/', ' ', trim($content));
+            if (!$preserve_line_breaks) {
+                // Remove multiple whitespace sequences
+                $content = preg_replace('/\s+/', ' ', trim($content));
+            } else {
+                // Remove supernumeraries whitespaces chars but preserve line breaks
+                $content = trim($content);
+                $content = preg_replace('/[ \t]+/', ' ', $content); // compact horizontal spaces
+                $content = preg_replace('/[\r\v\f]/', "\n", $content); // normalize vertical spaces
+                $content = preg_replace('/\n +/', "\n", $content); // remove spaces at start of each line
 
-           // Content is no more considered as HTML, decode its entities
+                $content = preg_replace('/\n{3,}/', "\n\n", $content); // compact line breaks to keep only relevant ones
+            }
+
+            // Content is no more considered as HTML, decode its entities
             $content = Html::entity_decode_deep($content);
         }
 
@@ -197,8 +210,9 @@ final class RichText
             'pre',
             'table',
             'ul',
+            'ol',
         ];
-        return preg_match('/<(' . implode('|', $html_tags) . ')(\s+[^>]*)?>/', $content) === 1;
+        return preg_match('/<(' . implode('|', $html_tags) . ')(\s+[^>]*)?>/i', $content) === 1;
     }
 
     /**
@@ -250,8 +264,13 @@ final class RichText
 
         if ($enhanced_html) {
             // URLs have to be transformed into <a> tags.
+            /** @var array $autolink_options */
+            global $autolink_options;
+            $autolink_options['strip_protocols'] = false;
             $content = autolink($content, false, ' target="_blank"');
         }
+
+        $content = self::fixImagesPath($content);
 
         return $content;
     }
@@ -272,8 +291,11 @@ final class RichText
             'images_gallery' => false,
             'user_mentions'  => true,
             'images_lazy'    => true,
+            'text_maxsize'   => GLPI_TEXT_MAXSIZE,
         ];
         $p = array_replace($p, $params);
+
+        $content_size = strlen($content ?? '');
 
        // Sanitize content first (security and to decode HTML entities)
         $content = self::getSafeHtml($content);
@@ -288,6 +310,52 @@ final class RichText
 
         if ($p['images_gallery']) {
             $content = self::replaceImagesByGallery($content);
+        }
+
+        if ($p['text_maxsize'] > 0 && $content_size > $p['text_maxsize']) {
+            $content = <<<HTML
+<div class="long_text">$content
+    <p class='read_more'>
+        <span class='read_more_button'>...</span>
+    </p>
+</div>
+HTML;
+            $content .= HTML::scriptBlock('$(function() { read_more(); });');
+        }
+
+        return $content;
+    }
+
+
+    /**
+     * Ensure current GLPI URL prefix (`$CFG_GLPI["root_doc"]`) is used in images URLs.
+     * It permits to fix path to images that are broken when GLPI URL prefix is changed.
+     *
+     * @param string $content
+     *
+     * @return string
+     */
+    private static function fixImagesPath(string $content): string
+    {
+        /** @var array $CFG_GLPI */
+        global $CFG_GLPI;
+
+        $patterns = [
+            // href attribute, surrounding by " or '
+            '/ (href)="[^"]*\/front\/document\.send\.php([^"]+)" /',
+            "/ (href)='[^']*\/front\/document\.send\.php([^']+)' /",
+
+            // src attribute, surrounding by " or '
+            '/ (src)="[^"]*\/front\/document\.send\.php([^"]+)" /',
+            "/ (src)='[^']*\/front\/document\.send\.php([^']+)' /",
+        ];
+
+        foreach ($patterns as $pattern) {
+            $content = preg_replace(
+                $pattern,
+                sprintf(' $1="%s/front/document.send.php$2" ', $CFG_GLPI["root_doc"]),
+                $content
+            );
         }
 
         return $content;
@@ -335,6 +403,10 @@ final class RichText
             $img_tag = $image_match[0];
             $docsrc  = $image_match[1];
             $docid   = $image_match[2];
+
+            // Special chars are encoded in `src` attribute. We decode them to be sure to work with "raw" data.
+            $docsrc  = htmlspecialchars_decode($image_match[1], ENT_QUOTES);
+
             $document = new Document();
             if ($document->getFromDB($docid)) {
                 $docpath = GLPI_DOC_DIR . '/' . $document->fields['filepath'];
@@ -455,17 +527,11 @@ final class RichText
             $out .= "<a href='{$img['src']}' itemprop='contentUrl' data-index='0'>";
             $width_attr = isset($img['thumbnail_w']) ? "width='{$img['thumbnail_w']}'" : "";
             $height_attr = isset($img['thumbnail_h']) ? "height='{$img['thumbnail_h']}'" : "";
-            $out .= "<img src='{$img['thumbnail_src']}' itemprop='thumbnail' loading='lazy' {$width_attr} {$height_attr}>";
+            $out .= "<img src='" . htmlspecialchars($img['thumbnail_src'], ENT_QUOTES) . "' itemprop='thumbnail' loading='lazy' {$width_attr} {$height_attr}>";
             $out .= "</a>";
             $out .= "</figure>";
         }
         $out .= "</div>";
-
-       // Decode images urls
-        $imgs = array_map(function ($img) {
-            $img['src'] = html_entity_decode($img['src']);
-            return $img;
-        }, $imgs);
 
         $items_json = json_encode($imgs);
         $dltext = __('Download');

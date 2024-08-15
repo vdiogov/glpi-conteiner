@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,10 +33,19 @@
  * ---------------------------------------------------------------------
  */
 
+$SECURITY_STRATEGY = 'no_check';
+
+/** @var array $CFG_GLPI */
+global $CFG_GLPI;
+
 include('../inc/includes.php');
 
-
-Session::checkLoginUser();
+// Cannot use `Session::checkLoginUser()` as it block users that have their password expired to be able to change it.
+// Indeed, when password expired, sessions is loaded without profiles nor rights, and `Session::checkLoginUser()`
+// considers it as an invalid session.
+if (Session::getLoginUserID() === false) {
+    Html::redirectToLogin();
+}
 
 switch (Session::getCurrentInterface()) {
     case 'central':

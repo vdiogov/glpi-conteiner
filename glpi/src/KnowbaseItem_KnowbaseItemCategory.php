@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -65,6 +65,7 @@ class KnowbaseItem_KnowbaseItemCategory extends CommonDBRelation
 
     public static function getItems(CommonDBTM $item, $start = 0, $limit = 0, $used = false)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $kbi_cat_table = self::getTable();
@@ -170,6 +171,8 @@ class KnowbaseItem_KnowbaseItemCategory extends CommonDBRelation
             );
         }
 
+        $rand = mt_rand();
+
         if ($canedit && $ok_state) {
             echo '<form method="post" action="' . Toolbox::getItemTypeFormURL(__CLASS__) . '">';
             echo "<div class='center'>";
@@ -178,7 +181,7 @@ class KnowbaseItem_KnowbaseItemCategory extends CommonDBRelation
             echo  __('Add a category');
             echo "</th><tr>";
             echo "<tr class='tab_bg_2'><td>";
-            $rand = KnowbaseItemCategory::dropdown();
+            KnowbaseItemCategory::dropdown(['rand' => $rand]);
             echo "</td><td>";
             echo "<input type=\"submit\" name=\"add\" value=\"" . _sx('button', 'Add') . "\" class=\"btn btn-primary\">";
             echo "</td></tr>";
@@ -276,7 +279,7 @@ class KnowbaseItem_KnowbaseItemCategory extends CommonDBRelation
     public static function getMassiveActionsForItemtype(
         array &$actions,
         $itemtype,
-        $is_deleted = 0,
+        $is_deleted = false,
         CommonDBTM $checkitem = null
     ) {
 

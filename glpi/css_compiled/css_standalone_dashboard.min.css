@@ -6,7 +6,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -41,10 +41,9 @@
 .dashboard.mini {
   padding-top: 0;
   margin: 0 auto;
-  margin-bottom: -10px;
+  margin-bottom: -45px !important;
   z-index: 1;
   box-sizing: content-box;
-  height: 100px;
 }
 .dashboard.mini + .search_page {
   z-index: 2;
@@ -54,7 +53,6 @@
 }
 .dashboard.mini .grid-guide {
   top: 0;
-  bottom: 0 !important;
 }
 .dashboard.mini .main-icon {
   font-size: 1.5em;
@@ -134,7 +132,7 @@
   display: none !important;
 }
 .dashboard.edit-mode .filters_toolbar .filters fieldset.filter .delete-filter {
-  display: inline-block;
+  display: inline-block !important;
 }
 .dashboard.edit-mode .filters_toolbar .filters fieldset.filter legend {
   display: inline-block;
@@ -328,7 +326,8 @@
 .dashboard .filters_toolbar .filters fieldset.filter .select2 .select2-selection__clear::after {
   position: absolute;
   color: #509ee3;
-  font: 11px var(--fa-font-solid);
+  font: var(--fa-font-solid);
+  font-size: 11px;
   content: "";
   opacity: 0.7;
   left: 7px;
@@ -420,7 +419,8 @@
   left: 40%;
   top: 40%;
   color: grey;
-  font: 1em var(--fa-font-solid);
+  font: var(--fa-font-solid);
+  font-size: 1em;
   position: absolute;
 }
 .dashboard .grid-stack.grid-stack-one-column-mode {
@@ -504,7 +504,8 @@
 }
 .dashboard .grid-stack .grid-stack-item .ui-resizable-se::before {
   content: "";
-  font: 13px var(--fa-font-solid);
+  font: var(--fa-font-solid);
+  font-size: 13px;
   position: absolute;
   bottom: -5px;
   right: 1px;
@@ -851,7 +852,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -883,7 +884,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -1117,7 +1118,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -1149,7 +1150,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -1714,7 +1715,8 @@
   right: 5px;
   bottom: 3px;
   color: #272727;
-  font: 1em var(--fa-font-solid);
+  font: var(--fa-font-solid);
+  font-size: 1em;
   position: absolute;
 }
 .dashboard.theme-dark, .theme-dark .dashboard {

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -40,6 +40,10 @@
  **/
 function update953to954()
 {
+    /**
+     * @var \DBmysql $DB
+     * @var \Migration $migration
+     */
     global $DB, $migration;
 
     $updateresult = true;
@@ -49,7 +53,7 @@ function update953to954()
     $migration->setVersion('9.5.4');
 
    /* Remove invalid Profile SO */
-    $DB->delete('glpi_displaypreferences', ['itemtype' => 'Profile', 'num' => 62]);
+    $DB->deleteOrDie('glpi_displaypreferences', ['itemtype' => 'Profile', 'num' => 62]);
    /* /Remove invalid Profile SO */
 
    /* Add is_default_profile */

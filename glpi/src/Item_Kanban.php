@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -51,6 +51,7 @@ class Item_Kanban extends CommonDBRelation
      */
     public static function saveStateForItem($itemtype, $items_id, $state)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         /** @var Kanban|CommonDBTM $item */
@@ -103,6 +104,7 @@ class Item_Kanban extends CommonDBRelation
      */
     public static function loadStateForItem($itemtype, $items_id, $timestamp = null)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         /** @var Kanban|CommonDBTM $item */

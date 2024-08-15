@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @copyright 2010-2022 by the FusionInventory Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
@@ -38,9 +38,9 @@ namespace Glpi\Inventory\Asset;
 
 use Computer_Item;
 use Glpi\Inventory\Conf;
+use Glpi\Toolbox\Sanitizer;
 use Monitor as GMonitor;
 use RuleImportAssetCollection;
-use Toolbox;
 
 class Monitor extends InventoryAsset
 {
@@ -52,8 +52,7 @@ class Monitor extends InventoryAsset
         $mapping = [
             'caption'      => 'name',
             'manufacturer' => 'manufacturers_id',
-            'description'  => 'comment',
-            'type'         => 'monitortypes_id'
+            'description'  => 'comment'
         ];
 
         foreach ($this->data as &$val) {
@@ -102,6 +101,7 @@ class Monitor extends InventoryAsset
      */
     protected function getExisting(): array
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $db_existing = [];
@@ -162,10 +162,11 @@ class Monitor extends InventoryAsset
                     // add monitor
                     $val->entities_id = $entities_id;
                     $val->is_dynamic = 1;
-                    $items_id = $monitor->add(Toolbox::addslashes_deep($this->handleInput($val)));
+                    $items_id = $monitor->add(Sanitizer::sanitize($this->handleInput($val, $monitor)));
                 } else {
                     $items_id = $data['found_inventories'][0];
-                    $monitor->update(Toolbox::addslashes_deep($this->handleInput($val) + ['id' => $items_id]));
+                    $monitor->getFromDB($items_id);
+                    $monitor->update(Sanitizer::sanitize($this->handleInput($val, $monitor) + ['id' => $items_id]));
                 }
 
                 $monitors[] = $items_id;
@@ -233,5 +234,10 @@ class Monitor extends InventoryAsset
     {
         $this->import_monitor_on_partial_sn = $conf->import_monitor_on_partial_sn;
         return $conf->import_monitor == 1;
+    }
+
+    public function getItemtype(): string
+    {
+        return \Computer_Item::class;
     }
 }

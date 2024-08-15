@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,13 +33,20 @@
  * ---------------------------------------------------------------------
  */
 
+/** @var array $CFG_GLPI */
+global $CFG_GLPI;
+
+if (isset($_GET["embed"]) && isset($_GET["dashboard"])) {
+    $SECURITY_STRATEGY = 'no_check'; // Allow anonymous access for embed dashboards.
+}
+
 include('../inc/includes.php');
 
 // embed (anonymous) dashboard
 if (isset($_GET["embed"]) && isset($_GET["dashboard"])) {
     $grid      = new Glpi\Dashboard\Grid($_GET["dashboard"]);
     $dashboard = $grid->getDashboard();
-    Html::popHeader($dashboard->getTitle(), $_SERVER['PHP_SELF'], false, 'central', 'central');
+    Html::zeroSecurityIframedHeader($grid->getDashboard()->getTitle(), 'central', 'central');
     echo $grid->embed($_REQUEST);
     Html::popFooter();
     exit;

@@ -2,7 +2,7 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 415:
+/***/ 102:
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -13,9 +13,9 @@
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.GridStackDD = void 0;
 /* eslint-disable @typescript-eslint/no-unused-vars */
-const gridstack_ddi_1 = __webpack_require__(404);
-const gridstack_1 = __webpack_require__(401);
-const utils_1 = __webpack_require__(403);
+const gridstack_ddi_1 = __webpack_require__(91);
+const gridstack_1 = __webpack_require__(88);
+const utils_1 = __webpack_require__(90);
 // TEST let count = 0;
 /**
  * Base class implementing common Grid drag'n'drop functionality, with domain specific subclass (h5 vs jq subclasses)
@@ -659,7 +659,7 @@ gridstack_1.GridStack.prototype.enableResize = function (doEnable) {
 
 /***/ }),
 
-/***/ 404:
+/***/ 91:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -693,7 +693,7 @@ exports.GridStackDDI = GridStackDDI;
 
 /***/ }),
 
-/***/ 402:
+/***/ 89:
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -703,7 +703,7 @@ exports.GridStackDDI = GridStackDDI;
  */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.GridStackEngine = void 0;
-const utils_1 = __webpack_require__(403);
+const utils_1 = __webpack_require__(90);
 /**
  * Defines the GridStack engine that does most no DOM grid manipulation.
  * See GridStack methods and vars for descriptions.
@@ -1612,7 +1612,7 @@ GridStackEngine._idSeq = 1;
 
 /***/ }),
 
-/***/ 401:
+/***/ 88:
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -1635,14 +1635,14 @@ exports.GridStack = void 0;
  * Copyright (c) 2021 Alain Dumesny
  * see root license https://github.com/gridstack/gridstack.js/tree/master/LICENSE
  */
-const gridstack_engine_1 = __webpack_require__(402);
-const utils_1 = __webpack_require__(403);
-const gridstack_ddi_1 = __webpack_require__(404);
+const gridstack_engine_1 = __webpack_require__(89);
+const utils_1 = __webpack_require__(90);
+const gridstack_ddi_1 = __webpack_require__(91);
 // export all dependent file as well to make it easier for users to just import the main file
-__exportStar(__webpack_require__(405), exports);
-__exportStar(__webpack_require__(403), exports);
-__exportStar(__webpack_require__(402), exports);
-__exportStar(__webpack_require__(404), exports);
+__exportStar(__webpack_require__(92), exports);
+__exportStar(__webpack_require__(90), exports);
+__exportStar(__webpack_require__(89), exports);
+__exportStar(__webpack_require__(91), exports);
 // default values for grid options - used during init and when saving out
 const GridDefaults = {
     column: 12,
@@ -3075,7 +3075,7 @@ GridStack.Engine = gridstack_engine_1.GridStackEngine;
 
 /***/ }),
 
-/***/ 411:
+/***/ 98:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -3119,7 +3119,7 @@ exports.DDBaseImplement = DDBaseImplement;
 
 /***/ }),
 
-/***/ 413:
+/***/ 100:
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -3129,9 +3129,9 @@ exports.DDBaseImplement = DDBaseImplement;
  */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DDDraggable = void 0;
-const dd_manager_1 = __webpack_require__(407);
-const dd_utils_1 = __webpack_require__(412);
-const dd_base_impl_1 = __webpack_require__(411);
+const dd_manager_1 = __webpack_require__(94);
+const dd_utils_1 = __webpack_require__(99);
+const dd_base_impl_1 = __webpack_require__(98);
 class DDDraggable extends dd_base_impl_1.DDBaseImplement {
     constructor(el, option = {}) {
         super();
@@ -3430,7 +3430,7 @@ DDDraggable.originStyleProp = ['transition', 'pointerEvents', 'position',
 
 /***/ }),
 
-/***/ 414:
+/***/ 101:
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -3440,9 +3440,9 @@ DDDraggable.originStyleProp = ['transition', 'pointerEvents', 'position',
  */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DDDroppable = void 0;
-const dd_manager_1 = __webpack_require__(407);
-const dd_base_impl_1 = __webpack_require__(411);
-const dd_utils_1 = __webpack_require__(412);
+const dd_manager_1 = __webpack_require__(94);
+const dd_base_impl_1 = __webpack_require__(98);
+const dd_utils_1 = __webpack_require__(99);
 // TEST let count = 0;
 class DDDroppable extends dd_base_impl_1.DDBaseImplement {
     constructor(el, opts = {}) {
@@ -3604,7 +3604,7 @@ exports.DDDroppable = DDDroppable;
 
 /***/ }),
 
-/***/ 408:
+/***/ 95:
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -3614,9 +3614,9 @@ exports.DDDroppable = DDDroppable;
  */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DDElement = void 0;
-const dd_resizable_1 = __webpack_require__(409);
-const dd_draggable_1 = __webpack_require__(413);
-const dd_droppable_1 = __webpack_require__(414);
+const dd_resizable_1 = __webpack_require__(96);
+const dd_draggable_1 = __webpack_require__(100);
+const dd_droppable_1 = __webpack_require__(101);
 class DDElement {
     constructor(el) {
         this.el = el;
@@ -3705,7 +3705,7 @@ exports.DDElement = DDElement;
 
 /***/ }),
 
-/***/ 407:
+/***/ 94:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -3722,7 +3722,7 @@ exports.DDManager = DDManager;
 
 /***/ }),
 
-/***/ 410:
+/***/ 97:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -3810,7 +3810,7 @@ DDResizableHandle.prefix = 'ui-resizable-';
 
 /***/ }),
 
-/***/ 409:
+/***/ 96:
 /***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
@@ -3820,10 +3820,10 @@ DDResizableHandle.prefix = 'ui-resizable-';
  */
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DDResizable = void 0;
-const dd_resizable_handle_1 = __webpack_require__(410);
-const dd_base_impl_1 = __webpack_require__(411);
-const dd_utils_1 = __webpack_require__(412);
-const utils_1 = __webpack_require__(403);
+const dd_resizable_handle_1 = __webpack_require__(97);
+const dd_base_impl_1 = __webpack_require__(98);
+const dd_utils_1 = __webpack_require__(99);
+const utils_1 = __webpack_require__(90);
 class DDResizable extends dd_base_impl_1.DDBaseImplement {
     constructor(el, opts = {}) {
         super();
@@ -4095,7 +4095,7 @@ DDResizable._originStyleProp = ['width', 'height', 'position', 'left', 'top', 'o
 
 /***/ }),
 
-/***/ 412:
+/***/ 99:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -4195,7 +4195,7 @@ DDUtils.isEventSupportPassiveOption = ((() => {
 
 /***/ }),
 
-/***/ 406:
+/***/ 93:
 /***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
@@ -4215,12 +4215,12 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.GridStackDDNative = void 0;
-const dd_manager_1 = __webpack_require__(407);
-const dd_element_1 = __webpack_require__(408);
-const gridstack_dd_1 = __webpack_require__(415);
-const utils_1 = __webpack_require__(403);
+const dd_manager_1 = __webpack_require__(94);
+const dd_element_1 = __webpack_require__(95);
+const gridstack_dd_1 = __webpack_require__(102);
+const utils_1 = __webpack_require__(90);
 // export our base class (what user should use) and all associated types
-__exportStar(__webpack_require__(415), exports);
+__exportStar(__webpack_require__(102), exports);
 /**
  * HTML 5 Native DragDrop based drag'n'drop plugin.
  */
@@ -4341,7 +4341,7 @@ gridstack_dd_1.GridStackDD.registerPlugin(GridStackDDNative);
 
 /***/ }),
 
-/***/ 405:
+/***/ 92:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -4354,7 +4354,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 
 /***/ }),
 
-/***/ 403:
+/***/ 90:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -4767,7 +4767,7 @@ const skipFields = ['_isNested', 'el', 'grid', 'subGrid', 'engine'];
 
 /***/ }),
 
-/***/ 416:
+/***/ 103:
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.r(__webpack_exports__);
@@ -4845,10 +4845,8 @@ __webpack_require__.r(__webpack_exports__);
 /******/ 	
 /************************************************************************/
 var __webpack_exports__ = {};
-// This entry need to be wrapped in an IIFE because it need to be isolated against other modules in the chunk.
-(() => {
 __webpack_require__.r(__webpack_exports__);
-/* harmony import */ var gridstack__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(401);
+/* harmony import */ var gridstack__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(88);
 /* harmony import */ var gridstack__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(gridstack__WEBPACK_IMPORTED_MODULE_0__);
 /**
  * ---------------------------------------------------------------------
@@ -4857,7 +4855,7 @@ __webpack_require__.r(__webpack_exports__);
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -4886,10 +4884,8 @@ __webpack_require__.r(__webpack_exports__);
 // Gridstack lib
 
 window.GridStack = gridstack__WEBPACK_IMPORTED_MODULE_0__.GridStack;
-__webpack_require__(406);
-__webpack_require__(416);
-
-})();
+__webpack_require__(93);
+__webpack_require__(103);
 
 /******/ })()
 ;

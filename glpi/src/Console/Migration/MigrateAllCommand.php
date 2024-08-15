@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,28 +36,29 @@
 namespace Glpi\Console\Migration;
 
 use Glpi\Console\AbstractCommand;
+use Glpi\Console\Command\ConfigurationCommandInterface;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Input\ArrayInput;
 
-class MigrateAllCommand extends AbstractCommand
+class MigrateAllCommand extends AbstractCommand implements ConfigurationCommandInterface
 {
     protected function configure()
     {
         parent::configure();
 
-        $this->setName('glpi:migration:migrate_all');
+        $this->setName('migration:migrate_all');
         $this->setDescription(__('Execute all recommended optional migrations.'));
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $commands = [
-            'glpi:migration:myisam_to_innodb',
-            'glpi:migration:dynamic_row_format',
-            'glpi:migration:timestamps',
-            'glpi:migration:utf8mb4',
-            'glpi:migration:unsigned_keys',
+            'migration:myisam_to_innodb',
+            'migration:dynamic_row_format',
+            'migration:timestamps',
+            'migration:utf8mb4',
+            'migration:unsigned_keys',
         ];
 
         $options = [];
@@ -85,5 +86,14 @@ class MigrateAllCommand extends AbstractCommand
         }
 
         return self::SUCCESS;
+    }
+
+    public function getConfigurationFilesToUpdate(InputInterface $input): array
+    {
+        $config_files_to_update = ['config_db.php'];
+        if (file_exists(GLPI_CONFIG_DIR . '/config_db_slave.php')) {
+            $config_files_to_update[] = 'config_db_slave.php';
+        }
+        return $config_files_to_update;
     }
 }

@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -90,6 +90,7 @@ class State extends CommonTreeDropdown
      **/
     public static function dropdownBehaviour($name, $lib = "", $value = 0)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $elements = ["0" => __('Keep status')];
@@ -113,7 +114,11 @@ class State extends CommonTreeDropdown
 
     public static function showSummary()
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $state_type = $CFG_GLPI["state_types"];
         $states     = [];
@@ -150,6 +155,8 @@ class State extends CommonTreeDropdown
         }
 
         if (count($states)) {
+            $total = [];
+
            // Produce headline
             echo "<div class='center'><table class='tab_cadrehov'><tr>";
 
@@ -274,7 +281,7 @@ class State extends CommonTreeDropdown
         }
         if (!$this->isUnique($input)) {
             Session::addMessageAfterRedirect(
-                sprintf(__('%1$s must be unique!'), $this->getType(1)),
+                sprintf(__('%1$s must be unique!'), $this->getTypeName(1)),
                 false,
                 ERROR
             );
@@ -515,7 +522,7 @@ class State extends CommonTreeDropdown
     {
         if (!$this->isUnique($input)) {
             Session::addMessageAfterRedirect(
-                sprintf(__('%1$s must be unique per level!'), $this->getType(1)),
+                sprintf(__('%1$s must be unique per level!'), $this->getTypeName(1)),
                 false,
                 ERROR
             );
@@ -534,6 +541,7 @@ class State extends CommonTreeDropdown
      */
     public function isUnique($input)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $unicity_fields = ['states_id', 'name'];
@@ -556,6 +564,12 @@ class State extends CommonTreeDropdown
             return true;
         }
 
+        // Apply collate
+        if (isset($where['name'])) {
+            $collate = $DB->use_utf8mb4 ? "utf8mb4_bin" : "utf8_bin";
+            $where['name'] = new QueryExpression($DB->quoteValue(addslashes($where['name'])) . " COLLATE $collate");
+        }
+
         $query = [
             'FROM'   => $this->getTable(),
             'COUNT'  => 'cpt',
@@ -567,9 +581,12 @@ class State extends CommonTreeDropdown
 
     /**
      * Get visibility fields from conf
+     *
+     * @return array<string,string>
      */
     protected function getvisibilityFields(): array
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
         $fields = [];
         foreach ($CFG_GLPI['state_types'] as $type) {

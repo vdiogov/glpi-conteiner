@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -59,8 +59,9 @@ class DeviceMemory extends CommonDevice
                 ],
                 [
                     'name'  => 'frequence',
-                    'label' => __('Frequency'),
-                    'type'  => 'text',
+                    'label' => sprintf(__('%1$s (%2$s)'), __('Frequency'), __('MHz')),
+                    'type'  => 'integer',
+                    'min'   => 0,
                     'unit'  => __('MHz')
                 ],
                 [
@@ -87,15 +88,15 @@ class DeviceMemory extends CommonDevice
             'table'              => $this->getTable(),
             'field'              => 'size_default',
             'name'               => __('Size by default'),
-            'datatype'           => 'string',
+            'datatype'           => 'integer',
         ];
 
         $tab[] = [
             'id'                 => '12',
             'table'              => $this->getTable(),
             'field'              => 'frequence',
-            'name'               => __('Frequency'),
-            'datatype'           => 'string',
+            'name'               => sprintf(__('%1$s (%2$s)'), __('Frequency'), __('MHz')),
+            'datatype'           => 'integer',
         ];
 
         $tab[] = [
@@ -166,7 +167,7 @@ class DeviceMemory extends CommonDevice
             case 'Computer':
                 Manufacturer::getHTMLTableHeader(__CLASS__, $base, $super, $father, $options);
                 $base->addHeader('devicememory_type', _n('Type', 'Types', 1), $super, $father);
-                $base->addHeader('devicememory_frequency', __('Frequency'), $super, $father);
+                $base->addHeader('devicememory_frequency', sprintf(__('%1$s (%2$s)'), __('Frequency'), __('MHz')), $super, $father);
                 break;
         }
     }
@@ -223,6 +224,7 @@ class DeviceMemory extends CommonDevice
 
     public static function rawSearchOptionsToAdd($class, $main_joinparams)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $tab = [];

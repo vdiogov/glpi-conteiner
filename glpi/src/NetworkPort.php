@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -59,6 +59,7 @@ class NetworkPort extends CommonDBChild
     protected static $forward_entity_to = ['NetworkName'];
 
     public static $rightname                   = 'networking';
+    protected $displaylist = false;
 
     /**
      * Subset of input that will be used for NetworkPortInstantiation.
@@ -95,6 +96,11 @@ class NetworkPort extends CommonDBChild
                 break;
         }
         return $value;
+    }
+
+    public function useDeletedToLockIfDynamic()
+    {
+        return false;
     }
 
     public function __set(string $property, $value)
@@ -149,6 +155,7 @@ class NetworkPort extends CommonDBChild
      **/
     public static function getNetworkPortInstantiations()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         return $CFG_GLPI['networkport_instantiations'];
@@ -263,8 +270,9 @@ class NetworkPort extends CommonDBChild
         return $input;
     }
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (count($this->updates)) {
@@ -477,6 +485,7 @@ class NetworkPort extends CommonDBChild
                 'ifoutbytes'      => $this->fields['ifoutbytes'] ?? 0,
                 'ifinerrors'      => $this->fields['ifinerrors'] ?? 0,
                 'ifouterrors'     => $this->fields['ifouterrors'] ?? 0,
+                'is_dynamic'     =>  $this->fields['is_dynamic'] ?? 0,
             ],
             $unicity_input
         );
@@ -514,6 +523,7 @@ class NetworkPort extends CommonDBChild
 
     public function post_addItem()
     {
+        parent::post_addItem(); //for history
         $this->updateDependencies(!$this->input['_no_history']);
         $this->updateMetrics();
     }
@@ -532,6 +542,14 @@ class NetworkPort extends CommonDBChild
                 NetworkName::class,
                 NetworkPort_NetworkPort::class,
                 NetworkPort_Vlan::class,
+                NetworkPortAggregate::class,
+                NetworkPortAlias::class,
+                NetworkPortDialup::class,
+                NetworkPortEthernet::class,
+                NetworkPortFiberchannel::class,
+                NetworkPortLocal::class,
+                NetworkPortMetrics::class,
+                NetworkPortWifi::class,
             ]
         );
     }
@@ -643,10 +661,30 @@ class NetworkPort extends CommonDBChild
      **/
     public static function showForItem(CommonDBTM $item, $withtemplate = 0)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $itemtype = $item->getType();
         $items_id = $item->getField('id');
+
+        $netport = new self();
+        $netport_table = $netport->getTable();
+
+        //no matter if the main item is dynamic,
+        //deleted and dynamic networkport are displayed from lock tab
+        //deleted and non dynamic networkport are always displayed (with is_deleted column)
+        $deleted_criteria = [
+            'OR'  => [
+                'AND' => [
+                    "$netport_table.is_deleted" => 0,
+                    "$netport_table.is_dynamic" => 1
+                ],
+                "$netport_table.is_dynamic" => 0
+            ]
+        ];
 
         if (
             !NetworkEquipment::canView()
@@ -654,8 +692,6 @@ class NetworkPort extends CommonDBChild
         ) {
             return false;
         }
-
-        $netport = new self();
 
         if (($itemtype == 'NetworkPort') || ($withtemplate == 2)) {
             $canedit = false;
@@ -689,21 +725,25 @@ class NetworkPort extends CommonDBChild
         }
 
         $criteria = [
-            'FROM'   => $netport->getTable(),
+            'FROM'   => $netport_table,
             'WHERE'  => [
-                'items_id'  => $item->getID(),
-                'itemtype'  => $item->getType(), [
+                "$netport_table.items_id"  => $item->getID(),
+                "$netport_table.itemtype"  => $item->getType(), [
                     'OR' => [
-                        ['name' => ['!=', 'Management']],
-                        ['name' => null]
+                        ["$netport_table.name" => ['!=', 'Management']],
+                        ["$netport_table.name" => null]
                     ]
                 ]
-            ]
+            ] + $deleted_criteria
         ];
+
+        $so = $netport->rawSearchOptions();
+        foreach (Plugin::getAddSearchOptions(__CLASS__) as $key => $data) {
+            $so[] = ['id' => $key] + $data;
+        }
 
         $ports_iterator = $DB->request($criteria);
 
-        $so = $netport->rawSearchOptions();
         $dprefs = DisplayPreference::getForTypeUser(
             'Networkport',
             Session::getLoginUserID()
@@ -874,7 +914,7 @@ class NetworkPort extends CommonDBChild
                 'items_id'  => $item->getID(),
                 'itemtype'  => $item->getType(),
                 'name'      => 'Management'
-            ]
+            ] + $deleted_criteria
         ];
 
         $mports_iterator = $DB->request($criteria);
@@ -945,6 +985,7 @@ class NetworkPort extends CommonDBChild
      */
     protected function showPort(array $port, $dprefs, $so, $canedit, $agg, $rand, $with_ma = true)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $css_class = 'netport';
@@ -969,6 +1010,9 @@ class NetworkPort extends CommonDBChild
             foreach ($so as $option) {
                 if ($option['id'] == $dpref) {
                     switch ($dpref) {
+                        case 6:
+                            $output .= Dropdown::getYesNo($port['is_deleted']);
+                            break;
                         case 1:
                             if ($agg === true) {
                                 $td_class = 'aggregated';
@@ -1029,13 +1073,13 @@ class NetworkPort extends CommonDBChild
                             }
 
                             if (!empty($in)) {
-                                $in = Toolbox::getSize($in, 1000);
+                                $in = Toolbox::getSize($in);
                             } else {
                                 $in = ' - ';
                             }
 
                             if (!empty($out)) {
-                                $out = Toolbox::getSize($out, 1000);
+                                $out = Toolbox::getSize($out);
                             } else {
                                 $out = ' - ';
                             }
@@ -1112,7 +1156,7 @@ class NetworkPort extends CommonDBChild
 
                             $device1 = $netport->getItem();
 
-                            if (!$device1->can($device1->getID(), READ)) {
+                            if ($device1 === false || !$device1->can($device1->getID(), READ)) {
                                 break;
                             }
 
@@ -1237,7 +1281,36 @@ class NetworkPort extends CommonDBChild
                             }
                             break;
                         default:
-                            $output .= $port[$option['field']];
+                            if (
+                                isset($option["linkfield"])
+                                && isset($option['joinparams'])
+                            ) {
+                                $netport_table = $this->getTable();
+                                $already_link_tables = [];
+                                $join = Search::addLeftJoin(
+                                    __CLASS__,
+                                    $netport_table,
+                                    $already_link_tables,
+                                    $option["table"],
+                                    $option["linkfield"],
+                                    0,
+                                    0,
+                                    $option["joinparams"],
+                                    $option["field"]
+                                );
+                                $iterator = $DB->request([
+                                    'FROM'   => $netport_table,
+                                    'JOIN'   => [new QueryExpression($join)],
+                                    'WHERE'  => [
+                                        "$netport_table.id" => $port['id']
+                                    ]
+                                ]);
+                                foreach ($iterator as $row) {
+                                    $output .= $row[$option['field']];
+                                }
+                            } else {
+                                $output .= $port[$option['field']];
+                            }
                             break;
                     }
                 }
@@ -1250,6 +1323,7 @@ class NetworkPort extends CommonDBChild
 
     protected function getIpsForPort($itemtype, $items_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -1364,6 +1438,11 @@ class NetworkPort extends CommonDBChild
         echo Html::input('name', ['value' => $this->fields['name']]);
         echo "</td></tr>\n";
 
+        echo "<tr class='tab_bg_1'><td>" . __('Alias') . "</td>\n";
+        echo "<td>";
+        echo Html::input('ifalias', ['value' => $this->fields['ifalias']]);
+        echo "</td></tr>\n";
+
         $instantiation = $this->getInstantiation();
         if ($instantiation !== false) {
             echo "<tr class='tab_bg_1'><th colspan='4'>" . $instantiation->getTypeName(1) . "</th></tr>\n";
@@ -1424,7 +1503,7 @@ class NetworkPort extends CommonDBChild
                 'joinparams' => $joinparams
             ]
         ];
-        NetworkName::rawSearchOptionsToAdd($tab, $networkNameJoin, $itemtype);
+        NetworkName::rawSearchOptionsToAdd($tab, $networkNameJoin);
 
         $instantjoin = ['jointype'   => 'child',
             'beforejoin' => ['table'      => 'glpi_networkports',
@@ -1460,15 +1539,54 @@ class NetworkPort extends CommonDBChild
 
     public function getSpecificMassiveActions($checkitem = null)
     {
-
         $isadmin = $checkitem !== null && $checkitem->canUpdate();
         $actions = parent::getSpecificMassiveActions($checkitem);
+
+        //add purge action if main item is not dynamic
+        //NetworkPort delete / purge are handled a different way on dynamic asset (lock)
+        if (!$checkitem->isDynamic()) {
+            $actions['NetworkPort' . MassiveAction::CLASS_ACTION_SEPARATOR . 'purge']    = __('Delete permanently');
+        }
+
         if ($isadmin) {
             $vlan_prefix                    = 'NetworkPort_Vlan' . MassiveAction::CLASS_ACTION_SEPARATOR;
             $actions[$vlan_prefix . 'add']    = __('Associate a VLAN');
             $actions[$vlan_prefix . 'remove'] = __('Dissociate a VLAN');
         }
         return $actions;
+    }
+
+
+    public static function processMassiveActionsForOneItemtype(
+        MassiveAction $ma,
+        CommonDBTM $item,
+        array $ids
+    ) {
+        switch ($ma->getAction()) {
+            case 'purge':
+                foreach ($ids as $id) {
+                    if ($item->can($id, PURGE)) {
+                        // Only mark deletion for
+                        if (!$item->isDeleted()) {
+                            $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_KO);
+                            $ma->addMessage(sprintf(__('%1$s: %2$s'), $item->getLink(), __('Item need to be deleted first')));
+                        } else {
+                            $delete_array = ['id' => $id];
+
+                            if ($item->delete($delete_array, true)) {
+                                $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_OK);
+                            } else {
+                                $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_KO);
+                                $ma->addMessage($item->getErrorMessage(ERROR_ON_ACTION));
+                            }
+                        }
+                    } else {
+                        $ma->itemDone($item->getType(), $id, MassiveAction::ACTION_NORIGHT);
+                        $ma->addMessage($item->getErrorMessage(ERROR_RIGHT));
+                    }
+                }
+                return;
+        }
     }
 
 
@@ -1526,6 +1644,15 @@ class NetworkPort extends CommonDBChild
             'massiveaction'      => false
         ];
 
+        $tab[] = [
+            'id'                 => '6',
+            'table'              => $this->getTable(),
+            'field'              => 'is_deleted',
+            'name'               => __('Deleted'),
+            'datatype'           => 'bool',
+            'massiveaction'      => false
+        ];
+
         if ($this->isField('sockets_id')) {
             $tab[] = [
                 'id'                 => '9',
@@ -1549,7 +1676,8 @@ class NetworkPort extends CommonDBChild
             'table'              => $this->getTable(),
             'field'              => 'itemtype',
             'name'               => _n('Type', 'Types', 1),
-            'datatype'           => 'itemtype',
+            'datatype'           => 'itemtypename',
+            'itemtype_list'      => 'networkport_types',
             'massiveaction'      => false
         ];
 
@@ -1632,17 +1760,14 @@ class NetworkPort extends CommonDBChild
             'joinparams' => ['beforejoin' => $netportjoin]
         ];
 
-        if (!defined('TU_USER')) {
-            $tab[] = [
-                'id'    => '39',
-                'table' => $this->getTable(),
-                'field' => 'noone',
-                'name' => __('Connected to'),
-                'nosearch' => true,
-                'nodisplay' => true,
-                'massiveaction' => false
-            ];
-        }
+        $tab[] = [
+            'id'    => '39',
+            'table' => $this->getTable(),
+            'field' => '_virtual_connected_to',
+            'name' => __('Connected to'),
+            'nosearch' => true,
+            'massiveaction' => false
+        ];
 
         $tab[] = [
             'id'    => '40',
@@ -1682,6 +1807,7 @@ class NetworkPort extends CommonDBChild
 
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        // Can exists on template
@@ -1744,6 +1870,7 @@ class NetworkPort extends CommonDBChild
 
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (
@@ -1810,6 +1937,7 @@ class NetworkPort extends CommonDBChild
      */
     public function isHubConnected($networkports_id): bool
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $wired = new NetworkPort_NetworkPort();

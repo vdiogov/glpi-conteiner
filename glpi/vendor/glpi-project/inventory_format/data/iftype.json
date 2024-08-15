@@ -1502,7 +1502,7 @@
     {
         "decimal": "250",
         "name": "gpon",
-        "description": "Gigabit-capable passive optical networks\n(G-PON)  as per ITU-T G.948",
+        "description": "Gigabit-capable passive optical networks\n(G-PON)  as per ITU-T G.984",
         "references": "[Hyeri_Koh]"
     },
     {
@@ -1804,5 +1804,23 @@
         "name": "cpri",
         "description": "Common Public Radio Interface",
         "references": "[CPRI v7.0][Renwang_Liu]"
+    },
+    {
+        "decimal": "301",
+        "name": "omni",
+        "description": "Overlay Multilink Network Interface (OMNI)",
+        "references": "[draft-templin-6man-omni-00][Fred_L_Templin]"
+    },
+    {
+        "decimal": "302",
+        "name": "roe",
+        "description": "Radio over Ethernet Interface",
+        "references": "[1914.3-2018 - IEEE Standard for Radio over Ethernet Encapsulations and Mappings][Renwang_Liu]"
+    },
+    {
+        "decimal": "303",
+        "name": "p2pOverLan",
+        "description": "Point to Point over LAN interface",
+        "references": "[RFC9296]"
     }
 ]

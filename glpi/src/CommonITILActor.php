@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -96,7 +96,12 @@ abstract class CommonITILActor extends CommonDBRelation
      **/
     public function getActors($items_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
+
+        if (empty($items_id)) {
+            return [];
+        }
 
         $users = [];
         $iterator = $DB->request([
@@ -117,10 +122,11 @@ abstract class CommonITILActor extends CommonDBRelation
      **/
     public function isAlternateEmailForITILObject($items_id, $email)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
-            'FROM'   => $this->getTable(),
+            'FROM'   => static::getTable(),
             'WHERE'  => [
                 static::getItilObjectForeignKey()   => $items_id,
                 'alternative_email'                 => $email
@@ -301,13 +307,14 @@ abstract class CommonITILActor extends CommonDBRelation
 
     public function post_deleteFromDB()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $donotif = !isset($this->input['_disablenotif']) && $CFG_GLPI["use_notifications"];
 
         $item = $this->getConnexityItem(static::$itemtype_1, static::getItilObjectForeignKey());
 
-        if ($item instanceof CommonDBTM) {
+        if ($item instanceof CommonITILObject) {
             if (
                 ($item->countSuppliers(CommonITILActor::ASSIGN) == 0)
                 && ($item->countUsers(CommonITILActor::ASSIGN) == 0)
@@ -352,6 +359,14 @@ abstract class CommonITILActor extends CommonDBRelation
         if (isset($input[$fk_field]) && $input[$fk_field] > 0) {
             $current_type    = $input['type'] ?? 0;
             $actor_id        = $input[$fk_field];
+
+            // check if the actor exists in database
+            $itemtype = getItemtypeForForeignKeyField($fk_field);
+            $actor = new $itemtype();
+            if (!$actor->getFromDB($actor_id)) {
+                return false;
+            }
+
             $existing_actors = $this->getActors($input[static::getItilObjectForeignKey()] ?? 0);
             $existing_ids    = array_column($existing_actors[$current_type] ?? [], $fk_field);
 

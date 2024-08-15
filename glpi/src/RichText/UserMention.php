@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -41,10 +41,10 @@ use CommonITILObject;
 use CommonITILTask;
 use CommonITILValidation;
 use Glpi\Toolbox\Sanitizer;
+use DOMDocument;
 use ITILFollowup;
 use ITILSolution;
 use NotificationEvent;
-use SimpleXMLElement;
 use User;
 
 final class UserMention
@@ -188,13 +188,26 @@ final class UserMention
     {
         $ids = [];
 
+        if (empty($content)) {
+            return $ids;
+        }
+
         try {
             $content = Sanitizer::getVerbatimValue($content);
+            $dom = new DOMDocument();
             libxml_use_internal_errors(true);
-            $content_as_xml = new SimpleXMLElement('<div>' . $content . '</div>');
+            $dom->loadHTML($content);
+            // TODO In GLPI 10.1, find a way to remove usage of this `@` operator
+            // that was added to prevent Error E_WARNING simplexml_import_dom(): Invalid Nodetype to import
+            // with bad HTML content.
+            $content_as_xml = @simplexml_import_dom($dom);
         } catch (\Throwable $e) {
            // Sanitize process does not handle correctly `<` and `>` chars that are not surrounding html tags.
            // This generates invalid HTML that cannot be loaded by `SimpleXMLElement`.
+            return [];
+        }
+
+        if ($content_as_xml === null) {
             return [];
         }
 

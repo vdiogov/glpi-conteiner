@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -83,6 +83,7 @@ class Computer_Item extends CommonDBRelation
 
     public function prepareInputForAdd($input)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $item = static::getItemFromArray(static::$itemtype_2, static::$items_id_2, $input);
@@ -183,12 +184,15 @@ class Computer_Item extends CommonDBRelation
 
     public function cleanDBonPurge()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!isset($this->input['_no_auto_action'])) {
            //Get the computer name
             $computer = new Computer();
             $computer->getFromDB($this->fields['computers_id']);
+
+            $is_mainitem_dynamic = (bool) ($computer->fields['is_dynamic'] ?? false);
 
            //Get device fields
             if ($device = getItemForItemtype($this->fields['itemtype'])) {
@@ -226,6 +230,10 @@ class Computer_Item extends CommonDBRelation
                         }
 
                         if (count($updates)) {
+                            //propage is_dynamic value if needed to prevent locked fields
+                            if ((bool) ($device->fields['is_dynamic'] ?? false) && $is_mainitem_dynamic) {
+                                $updates['is_dynamic'] = 1;
+                            }
                             $updates['id'] = $this->fields['items_id'];
                             $device->update($updates);
                         }
@@ -239,7 +247,7 @@ class Computer_Item extends CommonDBRelation
     public static function getMassiveActionsForItemtype(
         array &$actions,
         $itemtype,
-        $is_deleted = 0,
+        $is_deleted = false,
         CommonDBTM $checkitem = null
     ) {
 
@@ -257,6 +265,7 @@ class Computer_Item extends CommonDBRelation
 
     public static function getRelationMassiveActionsSpecificities()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $specificities              = parent::getRelationMassiveActionsSpecificities();
@@ -285,6 +294,7 @@ class Computer_Item extends CommonDBRelation
      */
     public function disconnectForItem(CommonDBTM $item)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if ($item->getField('id')) {
@@ -316,12 +326,13 @@ class Computer_Item extends CommonDBRelation
      * Print the form for computers or templates connections to printers, screens or peripherals
      *
      * @param Computer $comp         Computer object
-     * @param boolean  $withtemplate Template or basic item (default 0)
+     * @param integer  $withtemplate Template or basic item (default 0)
      *
      * @return void
      **/
     public static function showForComputer(Computer $comp, $withtemplate = 0)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $ID      = $comp->fields['id'];
@@ -400,18 +411,24 @@ class Computer_Item extends CommonDBRelation
                 $header_bottom .=  "</th>";
             }
 
-            $header_end .= "<th>" . _n('Type', 'Types', 1) . "</th>";
+            $header_end .= "<th>" . __('Item type') . "</th>";
             $header_end .= "<th>" . __('Name') . "</th>";
             $header_end .= "<th>" . __('Automatic inventory') . "</th>";
             $header_end .= "<th>" . Entity::getTypeName(1) . "</th>";
             $header_end .= "<th>" . __('Serial number') . "</th>";
             $header_end .= "<th>" . __('Inventory number') . "</th>";
+            $header_end .= "<th>" . _n('Type', 'Types', 1) . "</th>";
             $header_end .= "</tr>";
             echo $header_begin . $header_top . $header_end;
 
             foreach ($datas as $data) {
                 $linkname = $data["name"];
                 $itemtype = $data['assoc_itemtype'];
+
+                $type_class = $itemtype . "Type";
+                $type_table = getTableForItemType($type_class);
+                $type_field = getForeignKeyFieldForTable($type_table);
+
                 if ($_SESSION["glpiis_ids_visible"] || empty($data["name"])) {
                     $linkname = sprintf(__('%1$s (%2$s)'), $linkname, $data["id"]);
                 }
@@ -440,6 +457,11 @@ class Computer_Item extends CommonDBRelation
                    (isset($data["serial"]) ? "" . $data["serial"] . "" : "-") . "</td>";
                 echo "<td>" .
                    (isset($data["otherserial"]) ? "" . $data["otherserial"] . "" : "-") . "</td>";
+                echo "<td>" .
+                    (isset($data[$type_field]) ? "" . Dropdown::getDropdownName(
+                        $type_table,
+                        $data[$type_field]
+                    ) . "" : "-") . "</td>";
                 echo "</tr>";
             }
             echo $header_begin . $header_bottom . $header_end;
@@ -466,6 +488,7 @@ class Computer_Item extends CommonDBRelation
     public static function showForItem(CommonDBTM $item, $withtemplate = 0)
     {
        // Prints a direct connection to a computer
+        /** @var \DBmysql $DB */
         global $DB;
 
         $comp   = new Computer();
@@ -624,6 +647,7 @@ class Computer_Item extends CommonDBRelation
      **/
     public static function unglobalizeItem(CommonDBTM $item)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // Update item to unit management :
@@ -680,9 +704,10 @@ class Computer_Item extends CommonDBRelation
         $fromtype,
         $myname,
         $entity_restrict = -1,
-        $onlyglobal = 0,
+        $onlyglobal = false,
         $used = []
     ) {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $rand = mt_rand();
@@ -735,9 +760,10 @@ class Computer_Item extends CommonDBRelation
         $fromtype,
         $myname,
         $entity_restrict = -1,
-        $onlyglobal = 0,
+        $onlyglobal = false,
         $used = []
     ) {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $rand     = mt_rand();
@@ -767,9 +793,11 @@ class Computer_Item extends CommonDBRelation
 
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
-       // can exists for Template
+        // can exists for Template
+        /** @var CommonDBTM $item */
         if ($item->can($item->getField('id'), READ)) {
             $nb = 0;
             $canview = false;
@@ -809,6 +837,7 @@ class Computer_Item extends CommonDBRelation
 
     public static function displayTabContentForItem(CommonGLPI $item, $tabnum = 1, $withtemplate = 0)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if ($item->getType() == Computer::getType()) {
@@ -840,6 +869,7 @@ class Computer_Item extends CommonDBRelation
      **/
     public static function canUnrecursSpecif(CommonDBTM $item, $entities)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if ($item instanceof Computer) {
@@ -856,11 +886,11 @@ class Computer_Item extends CommonDBRelation
                 'GROUP' => 'itemtype'
             ]);
 
-            while ($data = $iterator->next()) {
+            foreach ($iterator as $data) {
                 if (!class_exists($data['itemtype'])) {
                     continue;
                 }
-                if (countElementsInTable($data['itemtype']::getTable(), ['id' => $data['ids'], 'NOT' => ['entities_id' => $entities]]) > 0) {
+                if (countElementsInTable($data['itemtype']::getTable(), ['id' => explode(',', $data['ids']), 'NOT' => ['entities_id' => $entities]]) > 0) {
                     return false;
                 }
             }

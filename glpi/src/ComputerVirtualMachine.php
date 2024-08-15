@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -33,6 +33,9 @@
  * ---------------------------------------------------------------------
  */
 
+use Glpi\Application\View\TemplateRenderer;
+use Glpi\Toolbox\Sanitizer;
+
 /**
  * Virtual machine management
  */
@@ -56,13 +59,17 @@ class ComputerVirtualMachine extends CommonDBChild
         return __('Virtualization');
     }
 
+    public function useDeletedToLockIfDynamic()
+    {
+        return false;
+    }
 
     public function getTabNameForItem(CommonGLPI $item, $withtemplate = 0)
     {
 
         if (
             !$withtemplate
-            && ($item->getType() == 'Computer')
+            && $item instanceof Computer
             && Computer::canView()
         ) {
             $nb = 0;
@@ -83,6 +90,8 @@ class ComputerVirtualMachine extends CommonDBChild
 
         $ong = [];
         $this->addDefaultFormTab($ong);
+        $this->addStandardTab('Lock', $ong, $options);
+        $this->addStandardTab('Log', $ong, $options);
 
         return $ong;
     }
@@ -106,18 +115,15 @@ class ComputerVirtualMachine extends CommonDBChild
 
 
     /**
-     * Print the version form
+     * Display form
      *
-     * @param $ID        integer ID of the item
-     * @param $options   array
-     *     - target for the Form
-     *     - computers_id ID of the computer for add process
+     * @param integer $ID
+     * @param array   $options
      *
-     * @return true if displayed  false if item not found or not right to display
+     * @return boolean TRUE if form is ok
      **/
     public function showForm($ID, array $options = [])
     {
-
         if (!Session::haveRight("computer", UPDATE)) {
             return false;
         }
@@ -133,89 +139,22 @@ class ComputerVirtualMachine extends CommonDBChild
             $comp->getFromDB($options['computers_id']);
         }
 
-        $this->showFormHeader($options);
-
-        if ($this->isNewID($ID)) {
-            echo "<input type='hidden' name='computers_id' value='" . $options['computers_id'] . "'>";
-        }
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . Computer::getTypeName(1) . "</td>";
-        echo "<td>" . $comp->getLink() . "</td>";
-        $this->autoinventoryInformation();
-        echo "</tr>\n";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('Name') . "</td>";
-        echo "<td>";
-        echo Html::input('name', ['value' => $this->fields['name']]);
-        echo "</td><td rowspan='4'>" . __('Comments') . "</td>";
-        echo "<td rowspan='4'>";
-        echo "<textarea class='form-control' name='comment' >" . $this->fields["comment"] . "</textarea>";
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . VirtualMachineType::getTypeName(1) . "</td>";
-        echo "<td>";
-        VirtualMachineType::dropdown(['value' => $this->fields['virtualmachinetypes_id']]);
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . VirtualMachineSystem::getTypeName(1) . "</td>";
-        echo "<td>";
-        VirtualMachineSystem::dropdown(['value' => $this->fields['virtualmachinesystems_id']]);
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'><td>" . VirtualMachineState::getTypeName(1) . "</td>";
-        echo "<td>";
-        VirtualMachineState::dropdown(['value' => $this->fields['virtualmachinestates_id']]);
-        echo "</td></tr>";
-
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . __('UUID') . "</td>";
-        echo "<td>";
-        echo Html::input('uuid', ['value' => $this->fields['uuid']]);
-        echo "</td>";
-
-        echo "<td>" . __('Machine') . "</td>";
-        echo "<td>";
+        $linked_computer = "";
         if ($link_computer = self::findVirtualMachine($this->fields)) {
             $computer = new Computer();
             if ($computer->getFromDB($link_computer)) {
-                echo $computer->getLink(['comments' => true]);
-            } else {
-                echo NOT_AVAILABLE;
+                $linked_computer = $computer->getLink(['comments' => true]);
             }
         }
-        echo "</td>";
-        echo "</tr>";
 
-        echo "<tr class='tab_bg_1'>";
-        echo "<td>" . sprintf(__('%1$s (%2$s)'), _n('Memory', 'Memories', 1), __('Mio')) . "</td>";
-        echo "<td>";
-        echo Html::input(
-            'ram',
-            [
-                'value' => $this->fields['ram'],
-                'type' => 'number',
-                'min'    => 0,
-            ]
-        );
-        echo "</td>";
-
-        echo "<td>" . _x('quantity', 'Processors number') . "</td>";
-        echo "<td>";
-        echo Html::input(
-            'vcpu',
-            [
-                'value' => $this->fields['vcpu'],
-                'type' => 'number',
-                'min'    => 0,
-            ]
-        );
-        echo "</td></tr>";
-
-        $this->showFormButtons($options);
+        $options['canedit'] = Session::haveRight("computer", UPDATE);
+        $this->initForm($ID, $options);
+        TemplateRenderer::getInstance()->display('components/form/computervirtualmachine.html.twig', [
+            'item'                      => $this,
+            'computer'                  => $comp,
+            'params'                    => $options,
+            'linked_computer'           => $linked_computer,
+        ]);
 
         return true;
     }
@@ -260,7 +199,8 @@ class ComputerVirtualMachine extends CommonDBChild
 
                 $computer = new Computer();
                 foreach ($hosts as $host) {
-                    echo "<tr class='tab_bg_2'>";
+                    $class = $host['is_deleted'] ? "deleted" : "";
+                    echo "<tr class='tab_bg_2 $class' >";
                     echo "<td>";
                     if ($computer->can($host['computers_id'], READ)) {
                         echo "<a href='" . Computer::getFormURLWithID($computer->fields['id']) . "'>";
@@ -321,8 +261,7 @@ class ComputerVirtualMachine extends CommonDBChild
             self::getTable(),
             [
                 'WHERE'  => [
-                    'computers_id' => $ID,
-                    'is_deleted'   => 0
+                    'computers_id' => $ID
                 ],
                 'ORDER'  => 'name'
             ]
@@ -361,7 +300,8 @@ class ComputerVirtualMachine extends CommonDBChild
             $vm = new self();
             foreach ($virtualmachines as $virtualmachine) {
                 $vm->getFromDB($virtualmachine['id']);
-                echo "<tr class='tab_bg_2'>";
+                $class = $virtualmachine['is_deleted'] ? "deleted" : "";
+                echo "<tr class='tab_bg_2 $class'>";
                 echo "<td>" . $vm->getLink() . "</td>";
                 echo "<td>" . $virtualmachine['comment'] . "</td>";
                 echo "<td>" . Dropdown::getYesNo($vm->isDynamic()) . "</td>";
@@ -459,7 +399,7 @@ class ComputerVirtualMachine extends CommonDBChild
             }
         }
 
-        return $in;
+        return Sanitizer::sanitize($in);
     }
 
 
@@ -472,6 +412,7 @@ class ComputerVirtualMachine extends CommonDBChild
      **/
     public static function findVirtualMachine($fields = [])
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!isset($fields['uuid']) || empty($fields['uuid'])) {

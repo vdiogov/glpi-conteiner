@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -161,6 +161,7 @@ class Problem extends CommonITILObject
 
     public function pre_deleteItem()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         if (!isset($this->input['_disablenotif']) && $CFG_GLPI['use_notifications']) {
@@ -176,6 +177,7 @@ class Problem extends CommonITILObject
         if (static::canView()) {
             switch ($item->getType()) {
                 case __CLASS__:
+                    $ong = [];
                     if ($item->canUpdate()) {
                         $ong[1] = __('Statistics');
                     }
@@ -248,8 +250,9 @@ class Problem extends CommonITILObject
     }
 
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         parent::post_updateItem($history);
@@ -330,6 +333,7 @@ class Problem extends CommonITILObject
 
     public function post_addItem()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         parent::post_addItem();
@@ -489,7 +493,8 @@ class Problem extends CommonITILObject
             'field'              => 'impactcontent',
             'name'               => __('Impacts'),
             'massiveaction'      => false,
-            'datatype'           => 'text'
+            'datatype'           => 'text',
+            'htmltext'           => true
         ];
 
         $tab[] = [
@@ -498,7 +503,8 @@ class Problem extends CommonITILObject
             'field'              => 'causecontent',
             'name'               => __('Causes'),
             'massiveaction'      => false,
-            'datatype'           => 'text'
+            'datatype'           => 'text',
+            'htmltext'           => true
         ];
 
         $tab[] = [
@@ -507,7 +513,8 @@ class Problem extends CommonITILObject
             'field'              => 'symptomcontent',
             'name'               => __('Symptoms'),
             'massiveaction'      => false,
-            'datatype'           => 'text'
+            'datatype'           => 'text',
+            'htmltext'           => true
         ];
 
         $tab = array_merge($tab, Notepad::rawSearchOptionsToAdd());
@@ -746,7 +753,11 @@ class Problem extends CommonITILObject
      **/
     public static function showCentralList($start, $status = "process", $showgroupproblems = true)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         if (!static::canView()) {
             return false;
@@ -838,11 +849,9 @@ class Problem extends CommonITILObject
         $iterator = $DB->request($criteria);
 
         $total_row_count = count($iterator);
-        $displayed_row_count = (int)$_SESSION['glpidisplay_count_on_home'] > 0
-         ? min((int)$_SESSION['glpidisplay_count_on_home'], $total_row_count)
-         : $total_row_count;
+        $displayed_row_count = min((int)$_SESSION['glpidisplay_count_on_home'], $total_row_count);
 
-        if ($displayed_row_count > 0) {
+        if ($total_row_count > 0) {
             $options  = [
                 'criteria' => [],
                 'reset'    => 'reset',
@@ -957,99 +966,101 @@ class Problem extends CommonITILObject
                             'content'   => $main_header
                         ]
                     ],
-                    [
-                        [
-                            'content'   => __('ID'),
-                            'style'     => 'width: 75px'
-                        ],
-                        [
-                            'content'   => _n('Requester', 'Requesters', 1),
-                            'style'     => 'width: 20%'
-                        ],
-                        __('Description')
-                    ]
                 ],
                 'rows'         => []
             ];
 
             $i = 0;
-            foreach ($iterator as $data) {
-                $problem   = new self();
-                $rand      = mt_rand();
-                $row = [
-                    'values' => []
+            if ($displayed_row_count > 0) {
+                $twig_params['header_rows'][] = [
+                    [
+                        'content'   => __('ID'),
+                        'style'     => 'width: 75px'
+                    ],
+                    [
+                        'content'   => _n('Requester', 'Requesters', 1),
+                        'style'     => 'width: 20%'
+                    ],
+                    __('Description')
                 ];
-
-                if ($problem->getFromDBwithData($data['id'], 0)) {
-                    $bgcolor = $_SESSION["glpipriority_" . $problem->fields["priority"]];
-                    $name    = sprintf(__('%1$s: %2$s'), __('ID'), $problem->fields["id"]);
-                    $row['values'][] = [
-                        'class'   => 'priority_block',
-                        'content' => "<span style='background: $bgcolor'></span>&nbsp;$name"
+                foreach ($iterator as $data) {
+                    $problem = new self();
+                    $rand = mt_rand();
+                    $row = [
+                        'values' => []
                     ];
 
-                    $requesters = [];
-                    if (
-                        isset($problem->users[CommonITILActor::REQUESTER])
-                        && count($problem->users[CommonITILActor::REQUESTER])
-                    ) {
-                        foreach ($problem->users[CommonITILActor::REQUESTER] as $d) {
-                            if ($d["users_id"] > 0) {
-                                $userdata = getUserName($d["users_id"], 2);
-                                $name     = '<i class="fas fa-sm fa-fw fa-user text-muted me-1"></i>' .
-                                    $userdata['name'];
-                                $requesters[] = $name;
-                            } else {
-                                $requesters[] = '<i class="fas fa-sm fa-fw fa-envelope text-muted me-1"></i>' .
-                                       $d['alternative_email'];
+                    if ($problem->getFromDBwithData($data['id'], 0)) {
+                        $bgcolor = $_SESSION["glpipriority_" . $problem->fields["priority"]];
+                        $name = sprintf(__('%1$s: %2$s'), __('ID'), $problem->fields["id"]);
+                        $row['values'][] = [
+                            'class' => 'priority_block',
+                            'content' => "<span style='background: $bgcolor'></span>&nbsp;$name"
+                        ];
+
+                        $requesters = [];
+                        if (
+                            isset($problem->users[CommonITILActor::REQUESTER])
+                            && count($problem->users[CommonITILActor::REQUESTER])
+                        ) {
+                            foreach ($problem->users[CommonITILActor::REQUESTER] as $d) {
+                                if ($d["users_id"] > 0) {
+                                    $userdata = getUserName($d["users_id"], 2);
+                                    $name = '<i class="fas fa-sm fa-fw fa-user text-muted me-1"></i>' .
+                                        $userdata['name'];
+                                    $requesters[] = $name;
+                                } else {
+                                    $requesters[] = '<i class="fas fa-sm fa-fw fa-envelope text-muted me-1"></i>' .
+                                        $d['alternative_email'];
+                                }
                             }
                         }
-                    }
 
-                    if (
-                        isset($problem->groups[CommonITILActor::REQUESTER])
-                        && count($problem->groups[CommonITILActor::REQUESTER])
-                    ) {
-                        foreach ($problem->groups[CommonITILActor::REQUESTER] as $d) {
-                            $requesters[] = '<i class="fas fa-sm fa-fw fa-users text-muted me-1"></i>' .
-                                     Dropdown::getDropdownName("glpi_groups", $d["groups_id"]);
+                        if (
+                            isset($problem->groups[CommonITILActor::REQUESTER])
+                            && count($problem->groups[CommonITILActor::REQUESTER])
+                        ) {
+                            foreach ($problem->groups[CommonITILActor::REQUESTER] as $d) {
+                                $requesters[] = '<i class="fas fa-sm fa-fw fa-users text-muted me-1"></i>' .
+                                    Dropdown::getDropdownName("glpi_groups", $d["groups_id"]);
+                            }
                         }
-                    }
-                    $row['values'][] = implode('<br>', $requesters);
+                        $row['values'][] = implode('<br>', $requesters);
 
-                    $link = "<a id='problem" . $problem->fields["id"] . $rand . "' href='" .
-                    Problem::getFormURLWithID($problem->fields["id"]);
-                    if ($forcetab != '') {
-                        $link .= "&amp;forcetab=" . $forcetab;
-                    }
-                    $link .= "'>";
-                    $link .= "<span class='b'>" . $problem->fields["name"] . "</span></a>";
-                    $link = sprintf(
-                        __('%1$s %2$s'),
-                        $link,
-                        Html::showToolTip(
-                            RichText::getEnhancedHtml($problem->fields['content']),
-                            ['applyto' => 'problem' . $problem->fields["id"] . $rand,
-                                'display' => false
+                        $link = "<a id='problem" . $problem->fields["id"] . $rand . "' href='" .
+                            Problem::getFormURLWithID($problem->fields["id"]);
+                        if ($forcetab != '') {
+                            $link .= "&amp;forcetab=" . $forcetab;
+                        }
+                        $link .= "'>";
+                        $link .= "<span class='b'>" . $problem->fields["name"] . "</span></a>";
+                        $link = sprintf(
+                            __('%1$s %2$s'),
+                            $link,
+                            Html::showToolTip(
+                                RichText::getEnhancedHtml($problem->fields['content']),
+                                ['applyto' => 'problem' . $problem->fields["id"] . $rand,
+                                    'display' => false
+                                ]
+                            )
+                        );
+
+                        $row['values'][] = $link;
+                    } else {
+                        $row['class'] = 'tab_bg_2';
+                        $row['values'] = [
+                            [
+                                'colspan' => 6,
+                                'content' => "<i>" . __('No problem in progress.') . "</i>"
                             ]
-                        )
-                    );
+                        ];
+                    }
+                    $twig_params['rows'][] = $row;
 
-                    $row['values'][] = $link;
-                } else {
-                    $row['class'] = 'tab_bg_2';
-                    $row['values'] = [
-                        [
-                            'colspan'   => 6,
-                            'content'   => "<i>" . __('No problem in progress.') . "</i>"
-                        ]
-                    ];
-                }
-                $twig_params['rows'][] = $row;
-
-                $i++;
-                if ($i == $displayed_row_count) {
-                    break;
+                    $i++;
+                    if ($i == $displayed_row_count) {
+                        break;
+                    }
                 }
             }
             TemplateRenderer::getInstance()->display('components/table.html.twig', $twig_params);
@@ -1067,7 +1078,11 @@ class Problem extends CommonITILObject
      **/
     public static function showCentralCount(bool $foruser = false, bool $display = true)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
        // show a tab with count of jobs in the central and give link
         if (!static::canView()) {
@@ -1288,12 +1303,13 @@ class Problem extends CommonITILObject
      * Will also display problems of linked items
      *
      * @param CommonDBTM $item
-     * @param boolean    $withtemplate
+     * @param integer    $withtemplate
      *
      * @return void
      **/
     public static function showListForItem(CommonDBTM $item, $withtemplate = 0)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!Session::haveRight(self::$rightname, self::READALL)) {
@@ -1535,6 +1551,7 @@ class Problem extends CommonITILObject
             'entities_id'                => $_SESSION['glpiactive_entity'],
             'itilcategories_id'          => 0,
             'actiontime'                 => 0,
+            'date'                      => 'NULL',
             '_add_validation'            => 0,
             'users_id_validate'          => [],
             '_tasktemplates_id'          => [],
@@ -1555,6 +1572,7 @@ class Problem extends CommonITILObject
      */
     public function getActiveProblemsForItem($itemtype, $items_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         return $DB->request([

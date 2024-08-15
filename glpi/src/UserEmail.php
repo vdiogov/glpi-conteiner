@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -32,6 +32,8 @@
  *
  * ---------------------------------------------------------------------
  */
+
+use Glpi\Toolbox\Sanitizer;
 
 /**
  * UserEmail class
@@ -62,6 +64,7 @@ class UserEmail extends CommonDBChild
      **/
     public static function getDefaultForUser($users_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // Get default one
@@ -91,6 +94,7 @@ class UserEmail extends CommonDBChild
      **/
     public static function getAllForUser($users_id)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $emails = [];
@@ -120,6 +124,7 @@ class UserEmail extends CommonDBChild
      **/
     public static function isEmailForUser($users_id, $email)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -164,7 +169,7 @@ class UserEmail extends CommonDBChild
      * @param $field_name
      * @param $id
      **/
-    public function showChildForItemForm($canedit, $field_name, $id)
+    public function showChildForItemForm($canedit, $field_name, $id, bool $display = true)
     {
 
         if ($this->isNewID($this->getID())) {
@@ -172,25 +177,31 @@ class UserEmail extends CommonDBChild
         } else {
             $value = Html::entities_deep($this->fields['email']);
         }
-
+        $result = "";
         $field_name = $field_name . "[$id]";
-        echo "<div class='d-flex align-items-center'>";
-        echo "<input title='" . __s('Default email') . "' type='radio' name='_default_email'
+        $result .= "<div class='d-flex align-items-center'>";
+        $result .= "<input title='" . __s('Default email') . "' type='radio' name='_default_email'
              value='" . $this->getID() . "'";
         if (!$canedit) {
-            echo " disabled";
+            $result .= " disabled";
         }
         if ($this->fields['is_default']) {
-            echo " checked";
+            $result .= " checked";
         }
-        echo ">&nbsp;";
+        $result .= ">&nbsp;";
         if (!$canedit || $this->fields['is_dynamic']) {
-            echo "<input type='hidden' name='$field_name' value='$value'>";
-            printf(__('%1$s %2$s'), $value, "<span class='b'>(" . __('D') . ")</span>");
+            $result .= "<input type='hidden' name='$field_name' value='$value'>";
+            $result .= sprintf(__('%1$s %2$s'), $value, "<span class='b'>(" . __('D') . ")</span>");
         } else {
-            echo "<input type='text' size=30 class='form-control' name='$field_name' value='$value' >";
+            $result .= "<input type='text' size=30 class='form-control' name='$field_name' value='$value' >";
         }
-        echo "</div>";
+        $result .= "</div>";
+
+        if ($display) {
+            echo $result;
+        } else {
+            return $result;
+        }
     }
 
 
@@ -210,7 +221,7 @@ class UserEmail extends CommonDBChild
             !$user->can($users_id, READ)
             && ($users_id != Session::getLoginUserID())
         ) {
-            return false;
+            return;
         }
         $canedit = ($user->can($users_id, UPDATE) || ($users_id == Session::getLoginUserID()));
 
@@ -238,9 +249,7 @@ class UserEmail extends CommonDBChild
 
     public function prepareInputForAdd($input)
     {
-
-       // Check email validity
-        if (!isset($input['email']) || empty($input['email'])) {
+        if (!$this->checkInputEmailValidity($input)) {
             return false;
         }
 
@@ -250,6 +259,27 @@ class UserEmail extends CommonDBChild
         }
 
         return parent::prepareInputForAdd($input);
+    }
+
+    public function prepareInputForUpdate($input)
+    {
+        if (!$this->checkInputEmailValidity($input)) {
+            return false;
+        }
+
+        return parent::prepareInputForUpdate($input);
+    }
+
+    /**
+     * Check validity of email passed in input.
+     *
+     * @param array $input
+     *
+     * @return bool
+     */
+    private function checkInputEmailValidity(array $input): bool
+    {
+        return isset($input['email']) && !empty($input['email']) && GLPIMailer::validateAddress(Sanitizer::unsanitize($input['email']));
     }
 
 
@@ -266,8 +296,9 @@ class UserEmail extends CommonDBChild
     }
 
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // if default is set : unsed others for the users
@@ -293,6 +324,7 @@ class UserEmail extends CommonDBChild
 
     public function post_addItem()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // if default is set : unset others for the users
@@ -315,6 +347,7 @@ class UserEmail extends CommonDBChild
 
     public function post_deleteFromDB()
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
        // if default is set : set default to another one

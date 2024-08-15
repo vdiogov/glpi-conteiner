@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -37,6 +37,7 @@ namespace Glpi\Console\Cache;
 
 use Glpi\Cache\CacheManager;
 use Glpi\Console\AbstractCommand;
+use Glpi\Console\Command\ConfigurationCommandInterface;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -44,7 +45,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * @since 10.0.0
  */
-class SetNamespacePrefixCommand extends AbstractCommand
+class SetNamespacePrefixCommand extends AbstractCommand implements ConfigurationCommandInterface
 {
     /**
      * Error code returned if cache configuration file cannot be write.
@@ -61,7 +62,7 @@ class SetNamespacePrefixCommand extends AbstractCommand
      */
     private $cache_manager;
 
-    public function __construct(string $name = null)
+    public function __construct()
     {
         $this->cache_manager = new CacheManager();
 
@@ -71,8 +72,7 @@ class SetNamespacePrefixCommand extends AbstractCommand
     protected function configure()
     {
 
-        $this->setName('glpi:cache:set_namespace_prefix');
-        $this->setAliases(['cache:set_namespace_prefix']);
+        $this->setName('cache:set_namespace_prefix');
         $this->setDescription('Define cache namespace prefix');
 
         $this->addArgument('prefix', InputArgument::REQUIRED, 'Namespace prefix');
@@ -99,5 +99,10 @@ class SetNamespacePrefixCommand extends AbstractCommand
         );
 
         return 0; // Success
+    }
+
+    public function getConfigurationFilesToUpdate(InputInterface $input): array
+    {
+        return [$this->cache_manager::CONFIG_FILENAME];
     }
 }

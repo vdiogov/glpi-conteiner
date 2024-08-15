@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -36,6 +36,7 @@
 use Glpi\Application\View\TemplateRenderer;
 use Glpi\RichText\RichText;
 use Glpi\Toolbox\Sanitizer;
+use Glpi\Toolbox\URL;
 
 // $feed = new SimplePie();
 // $feed->set_cache_location('../files/_rss');
@@ -70,7 +71,7 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
 
     public static $rightname    = 'rssfeed_public';
 
-
+    const PERSONAL = 128;
 
     public static function getTypeName($nb = 0)
     {
@@ -85,16 +86,14 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
     public static function canCreate()
     {
 
-        return (Session::haveRight(self::$rightname, CREATE)
-              || Session::getCurrentInterface() != 'helpdesk');
+        return (Session::haveRightsOr(self::$rightname, [CREATE, self::PERSONAL]));
     }
 
 
     public static function canView()
     {
 
-        return (Session::haveRight('rssfeed_public', READ)
-              || Session::getCurrentInterface() != 'helpdesk');
+        return (Session::haveRightsOr(self::$rightname, [READ, self::PERSONAL]));
     }
 
 
@@ -130,7 +129,7 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
      **/
     public static function canUpdate()
     {
-        return (Session::getCurrentInterface() != 'helpdesk');
+        return (Session::haveRightsOr(self::$rightname, [UPDATE, self::PERSONAL]));
     }
 
 
@@ -140,7 +139,7 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
      **/
     public static function canPurge()
     {
-        return (Session::getCurrentInterface() != 'helpdesk');
+        return (Session::haveRightsOr(self::$rightname, [PURGE, self::PERSONAL]));
     }
 
 
@@ -210,6 +209,7 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
     public static function addVisibilityJoins($forceall = false)
     {
        //not deprecated because used in Search
+        /** @var \DBmysql $DB */
         global $DB;
 
        //get and clean criteria
@@ -220,11 +220,11 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
         $it = new \DBmysqlIterator(null);
         $it->buildQuery($criteria);
         $sql = $it->getSql();
-        $sql = str_replace(
-            'SELECT * FROM ' . $DB->quoteName(self::getTable()) . ' ',
+        $sql = trim(str_replace(
+            'SELECT * FROM ' . $DB->quoteName(self::getTable()),
             '',
             $sql
-        );
+        ));
         return $sql;
     }
 
@@ -791,14 +791,7 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
             echo Dropdown::getYesNo($this->fields['have_error']);
         }
         echo "</td>";
-        if ($this->fields['have_error']) {
-            echo "<td>" . __('RSS feeds found');
-            echo "</td><td>";
-            $this->showDiscoveredFeeds();
-            echo "</td>\n";
-        } else {
-            echo "<td colspan='2'>&nbsp;</td>";
-        }
+        echo "<td colspan='2'>&nbsp;</td>";
         echo "</tr>";
 
         $this->showFormButtons($options);
@@ -853,9 +846,9 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
             foreach ($feed->get_items(0, $this->fields['max_items']) as $item) {
                 $rss_feed['items'][] = [
                     'title'     => $item->get_title(),
-                    'link'      => $item->get_permalink(),
+                    'link'      => URL::sanitizeURL($item->get_permalink()),
                     'timestamp' => Html::convDateTime($item->get_date('Y-m-d H:i:s')),
-                    'content'   => $item->get_content()
+                    'content'   => RichText::getSafeHtml($item->get_content()),
                 ];
             }
         } else {
@@ -875,9 +868,12 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
      * Show discovered feeds
      *
      * @return void
+     *
+     * @deprecated
      **/
     public function showDiscoveredFeeds()
     {
+        Toolbox::deprecated();
         if (!Toolbox::isUrlSafe($this->fields['url'])) {
             return;
         }
@@ -897,7 +893,7 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
             $newurl  = $f->url;
             $newfeed = self::getRSSFeed($newurl);
             if ($newfeed && !$newfeed->error()) {
-                $link = $newfeed->get_permalink();
+                $link = URL::sanitizeURL($newfeed->get_permalink());
                 if (!empty($link)) {
                      echo "<a href='$newurl'>" . $newfeed->get_title() . "</a>&nbsp;";
                      Html::showSimpleForm(
@@ -916,55 +912,63 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
 
 
     /**
-     * Get a specific RSS feed
+     * Get a specific RSS feed.
      *
-     * @param $url             string/array   URL of the feed or array of URL
-     * @param $cache_duration  timestamp      cache duration (default DAY_TIMESTAMP)
+     * @param string    $url            URL of the feed or array of URL
+     * @param int       $cache_duration Cache duration, in seconds
      *
-     * @return feed object
+     * @return SimplePie|false
      **/
     public static function getRSSFeed($url, $cache_duration = DAY_TIMESTAMP)
     {
-        global $CFG_GLPI;
-
-        if (!Toolbox::isUrlSafe($url)) {
-            return false;
-        }
+        /** @var \Psr\SimpleCache\CacheInterface $GLPI_CACHE */
+        global $GLPI_CACHE;
 
         if (Sanitizer::isHtmlEncoded($url)) {
             $url = Sanitizer::decodeHtmlSpecialChars($url);
         }
-        $feed = new SimplePie();
-        $feed->set_cache_location(GLPI_RSS_DIR);
-        $feed->set_cache_duration($cache_duration);
 
-       // proxy support
-        if (!empty($CFG_GLPI["proxy_name"])) {
-            $prx_opt = [];
-            $prx_opt[CURLOPT_PROXY]     = $CFG_GLPI["proxy_name"];
-            $prx_opt[CURLOPT_PROXYPORT] = $CFG_GLPI["proxy_port"];
-            if (!empty($CFG_GLPI["proxy_user"])) {
-                $prx_opt[CURLOPT_HTTPAUTH]     = CURLAUTH_ANYSAFE;
-                $prx_opt[CURLOPT_PROXYUSERPWD] = $CFG_GLPI["proxy_user"] . ":" .
-                                             (new GLPIKey())->decrypt($CFG_GLPI["proxy_passwd"]);
+        // Fetch feed data, unless it is already cached
+        $cache_key = sha1($url);
+        $update_cache = false;
+        if (($raw_data = $GLPI_CACHE->get($cache_key)) === null) {
+            if (!Toolbox::isUrlSafe($url)) {
+                return false;
             }
-            $feed->set_curl_options($prx_opt);
+
+            $error_msg  = null;
+            $curl_error = null;
+            $raw_data = Toolbox::callCurl($url, [], $error_msg, $curl_error, true);
+            if (empty($raw_data)) {
+                return false;
+            }
+
+            $doc = new DOMDocument();
+            if (!@$doc->loadXML($raw_data)) {
+                // Prevent exception on invalid XML (see https://github.com/simplepie/simplepie/pull/747)
+                return false;
+            }
+
+            $update_cache = true;
         }
 
-        $feed->enable_cache(true);
-        $feed->set_feed_url($url);
+        $feed = new SimplePie();
+        $feed->enable_cache(false);
+        $feed->set_raw_data($raw_data);
         $feed->force_feed(true);
-       // Initialize the whole SimplePie object.  Read the feed, process it, parse it, cache it, and
-       // all that other good stuff.  The feed's information will not be available to SimplePie before
-       // this is called.
+        // Initialize the whole SimplePie object. Read the feed, process it, parse it, cache it, and
+        // all that other good stuff. The feed's information will not be available to SimplePie before
+        // this is called.
         $feed->init();
 
-       // We'll make sure that the right content type and character encoding gets set automatically.
-       // This function will grab the proper character encoding, as well as set the content type to text/html.
-        $feed->handle_content_type();
         if ($feed->error()) {
             return false;
         }
+
+        if ($update_cache) {
+            $GLPI_CACHE->set($cache_key, $raw_data, $cache_duration);
+        }
+
         return $feed;
     }
 
@@ -972,14 +976,18 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
     /**
      * Show list for central view
      *
-     * @param $personal boolean   display rssfeeds created by me ?
-     * @param $personal $display  if false, return html
+     * @param boolean $personal display rssfeeds created by me?
+     * @param boolean $display  if false, return html
      *
-     * @return void
+     * @return false|void|string
      **/
     public static function showListForCentral(bool $personal = true, bool $display = true)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $users_id             = Session::getLoginUserID();
 
@@ -1064,21 +1072,21 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
                 $output .= "<tr class='tab_bg_1'><td>";
                 $output .= Html::convDateTime($item->get_date('Y-m-d H:i:s'));
                 $output .= "</td><td>";
-                $link = $item->feed->get_permalink();
-                if (empty($link)) {
+                $feed_link = URL::sanitizeURL($item->feed->get_permalink());
+                if (empty($feed_link)) {
                     $output .= $item->feed->get_title();
                 } else {
-                    $output .= "<a target='_blank' href='$link'>" . $item->feed->get_title() . '</a>';
+                    $output .= '<a target="_blank" href="' . htmlspecialchars($feed_link) . '">' . $item->feed->get_title() . '</a>';
                 }
-                $link = $item->get_permalink();
 
+                $item_link = URL::sanitizeURL($item->get_permalink());
                 $rand = mt_rand();
                 $output .= "<div id='rssitem$rand'>";
-                if (!is_null($link)) {
-                    $output .= "<a target='_blank' href='$link'>";
+                if (!empty($item_link)) {
+                    $output .= '<a target="_blank" href="' . htmlspecialchars($item_link) . '">';
                 }
                 $output .= $item->get_title();
-                if (!is_null($link)) {
+                if (!empty($item_link)) {
                     $output .= "</a>";
                 }
                 $output .= "</div>";
@@ -1110,6 +1118,7 @@ class RSSFeed extends CommonDBVisible implements ExtraVisibilityCriteria
             $values = [READ => __('Read')];
         } else {
             $values = parent::getRights();
+            $values[self::PERSONAL] = __('Manage personal');
         }
         return $values;
     }

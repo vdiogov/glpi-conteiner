@@ -5,7 +5,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -175,10 +175,6 @@
    .submit[type=reset] {
      background-color: transparent;
      margin-left: .5em;
-   }
-
-   .tox-tinymce.tox-fullscreen {
-      top: 105px !important;
    }
 
    .pointer {
@@ -372,11 +368,17 @@
 
    .tab_bg_1_2 {
       background-color: #cf9b9b;
+      @if $is_dark {
+         color: $dark;
+      }
    }
 
 
    .tab_bg_2_2 {
       background-color: #cf9b9b;
+      @if $is_dark {
+        color: $dark;
+     }
    }
 
    .tab_date {
@@ -645,6 +647,7 @@
    .faqadd_block {
       position: relative;
       display: inline-block;
+      width: max-content;
 
       .display_faq_chkbox {
          display: none;
@@ -657,9 +660,9 @@
       box-shadow: 0px 1px 2px 1px #D2D2D2;
       position: absolute;
       padding: 5px;
-      width: 450px;
+      width: 420px;
       height: 40vh;
-      right: -5px;
+      right: -25px;
       z-index: 1000;
       margin-top: 20px;
       border-radius: 2px;
@@ -680,7 +683,7 @@
          border-width: 0 10px 17.3px 10px;
          border-color: transparent transparent #CCC transparent;
          top: -18px;
-         right: 5px;
+         right: 25px;
          position: absolute;
       }
 
@@ -693,19 +696,23 @@
          border-width: 0 10px 18.3px 10px;
          border-color: transparent transparent #ffffff transparent;
          top: -16px;
-         right: 5px;
+         right: 25px;
          position: absolute;
       }
    }
 
    .faqadd_block_content {
-      overflow-x: hidden;
-      overflow-y: auto;
+      overflow: auto;
       position: absolute;
       top: 40px;
       bottom: 0;
       left: 0;
       right: 0;
+   }
+
+   .faqadd_entries,
+   .faqadd_entries:hover {
+      color: initial;
    }
 
    .faqadd_entries {
@@ -772,6 +779,7 @@
 
    .boxnotetext {
       padding: 5px;
+      margin-top: 1rem;
    }
 
    .error {
@@ -1107,7 +1115,7 @@
       }
 
       &:after {
-         font-family: 'Font Awesome 5 Free';
+         font-family: 'Font Awesome 6 Free';
          position: relative;
          left: -15px;
          top: 1px;
@@ -1404,12 +1412,6 @@
    .tab_check td i.fa-solid {
       font-size: 12px;
       margin-right: 3px;
-   }
-   .tab_check td i.fa-check {
-      color: #008e2c;
-   }
-   .tab_check td i.fa-exclamation-triangle {
-      color: #ffa500;
    }
    /* /Styles for update page */
 

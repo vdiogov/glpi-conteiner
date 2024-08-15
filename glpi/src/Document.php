@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -42,6 +42,7 @@ use Glpi\Toolbox\Sanitizer;
 class Document extends CommonDBTM
 {
     use Glpi\Features\TreeBrowse;
+    use Glpi\Features\ParentStatus;
 
    // From CommonDBTM
     public $dohistory                   = true;
@@ -70,6 +71,7 @@ class Document extends CommonDBTM
      **/
     public static function canApplyOn($item)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        // All devices can have documents!
@@ -102,6 +104,7 @@ class Document extends CommonDBTM
      **/
     public static function getItemtypesThatCanHave()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         return array_merge(
@@ -136,10 +139,13 @@ class Document extends CommonDBTM
     {
 
         if (isset($this->input['itemtype']) && isset($this->input['items_id'])) {
-            if ($item = getItemForItemtype($this->input['itemtype'])) {
-                if ($item->canAddItem('Document')) {
-                    return true;
-                }
+            if (
+                ($item = getItemForItemtype($this->input['itemtype']))
+                && $item->getFromDB($this->input['items_id'])
+            ) {
+                return $item->canAddItem('Document');
+            } else {
+                unset($this->input['itemtype'], $this->input['items_id']);
             }
         }
 
@@ -182,14 +188,21 @@ class Document extends CommonDBTM
             ) {
                 if (unlink(GLPI_DOC_DIR . "/" . $this->fields["filepath"])) {
                     Session::addMessageAfterRedirect(sprintf(
-                        __('Succesful deletion of the file %s'),
-                        GLPI_DOC_DIR . "/" . $this->fields["filepath"]
+                        __('Successful deletion of the file %s'),
+                        $this->fields["filepath"]
                     ));
                 } else {
+                    trigger_error(
+                        sprintf(
+                            'Failed to delete the file %s',
+                            GLPI_DOC_DIR . "/" . $this->fields["filepath"]
+                        ),
+                        E_USER_WARNING
+                    );
                     Session::addMessageAfterRedirect(
                         sprintf(
                             __('Failed to delete the file %s'),
-                            GLPI_DOC_DIR . "/" . $this->fields["filepath"]
+                            $this->fields["filepath"]
                         ),
                         false,
                         ERROR
@@ -215,6 +228,7 @@ class Document extends CommonDBTM
 
     public function prepareInputForAdd($input)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        // security (don't accept filename from $_REQUEST)
@@ -347,6 +361,12 @@ class Document extends CommonDBTM
                 'itemtype'     => $this->input["itemtype"],
                 'items_id'     => $this->input["items_id"]
             ]);
+
+            if (is_a($this->input["itemtype"], CommonITILObject::class, true)) {
+                $itilobject = new $this->input["itemtype"]();
+                $itilobject->getFromDB($this->input["items_id"]);
+                $this->updateParentStatus($itilobject, $this->input);
+            }
 
             Event::log(
                 $this->fields['id'],
@@ -517,6 +537,7 @@ class Document extends CommonDBTM
      **/
     public static function getMaxUploadSize()
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
        //TRANS: %s is a size
@@ -548,13 +569,16 @@ class Document extends CommonDBTM
      **/
     public function getDownloadLink($linked_item = null, $len = 20)
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $link_params = '';
         if (is_string($linked_item)) {
             // Old behaviour.
-            // TODO: Deprecate it in GLPI 10.1.
-            // Toolbox::deprecated('Passing additionnal URL parameters in Document::getDownloadLink() is deprecated.');
+            Toolbox::deprecated('Passing additionnal URL parameters in Document::getDownloadLink() is deprecated.', true, '11.0');
             $linked_item = null;
             $link_params = $linked_item;
         } elseif ($linked_item !== null && !($linked_item instanceof CommonDBTM)) {
@@ -563,7 +587,7 @@ class Document extends CommonDBTM
             $link_params = sprintf('&itemtype=%s&items_id=%s', $linked_item->getType(), $linked_item->getID());
         }
 
-        $splitter = explode("/", $this->fields['filename']);
+        $splitter = $this->fields['filename'] !== null ? explode("/", $this->fields['filename']) : [];
 
         if (count($splitter) == 2) {
            // Old documents in EXT/filename
@@ -575,7 +599,7 @@ class Document extends CommonDBTM
 
         $initfileout = $fileout;
 
-        if (Toolbox::strlen($fileout) > $len) {
+        if ($fileout !== null && Toolbox::strlen($fileout) > $len) {
             $fileout = Toolbox::substr($fileout, 0, $len) . "&hellip;";
         }
 
@@ -593,7 +617,7 @@ class Document extends CommonDBTM
                     title=\"" . $initfileout . "\"target='_blank'>";
             $close = "</a>";
         }
-        $splitter = explode("/", $this->fields['filepath']);
+        $splitter = $this->fields['filename'] !== null ? explode("/", $this->fields['filepath']) : [];
 
         if (count($splitter)) {
             $iterator = $DB->request([
@@ -633,6 +657,7 @@ class Document extends CommonDBTM
     public function getFromDBbyContent($entity, $path)
     {
 
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (empty($path)) {
@@ -715,6 +740,7 @@ class Document extends CommonDBTM
 
         if (
             $itemtype !== null
+            && is_a($itemtype, CommonDBTM::class, true)
             && $items_id !== null
             && $this->canViewFileFromItem($itemtype, $items_id)
         ) {
@@ -768,6 +794,7 @@ class Document extends CommonDBTM
     private function canViewFileFromReminder()
     {
 
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!Session::getLoginUserID()) {
@@ -811,6 +838,10 @@ class Document extends CommonDBTM
     private function canViewFileFromKnowbaseItem()
     {
 
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
         global $CFG_GLPI, $DB;
 
        // Knowbase items can be viewed by non connected user in case of public FAQ
@@ -868,6 +899,7 @@ class Document extends CommonDBTM
     private function canViewFileFromItilObject($itemtype, $items_id)
     {
 
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (!Session::getLoginUserID()) {
@@ -907,6 +939,7 @@ class Document extends CommonDBTM
      */
     private function canViewFileFromItem($itemtype, $items_id): bool
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $item = new $itemtype();
@@ -1143,6 +1176,12 @@ class Document extends CommonDBTM
      **/
     public function moveUploadedDocument(array &$input, $filename)
     {
+        if (str_contains($filename, '/') || str_contains($filename, '\\')) {
+            // Filename is not supposed to contains directory separators.
+            trigger_error(sprintf('Moving file `%s` is forbidden for security reasons.', $filename), E_USER_WARNING);
+            return false;
+        }
+
         $prefix = '';
         if (isset($input['_prefix_filename'])) {
             $prefix = array_shift($input['_prefix_filename']);
@@ -1157,8 +1196,12 @@ class Document extends CommonDBTM
         }
 
         if (!is_file($fullpath)) {
+            trigger_error(
+                sprintf('File %s not found.', $fullpath),
+                E_USER_WARNING
+            );
             Session::addMessageAfterRedirect(
-                sprintf(__('File %s not found.'), $fullpath),
+                sprintf(__('File %s not found.'), $filename),
                 false,
                 ERROR
             );
@@ -1186,16 +1229,23 @@ class Document extends CommonDBTM
         ) {
             if (unlink(GLPI_DOC_DIR . "/" . $input['current_filepath'])) {
                 Session::addMessageAfterRedirect(sprintf(
-                    __('Succesful deletion of the file %s'),
+                    __('Successful deletion of the file %s'),
                     $input['current_filename']
                 ));
             } else {
                // TRANS: %1$s is the curent filename, %2$s is its directory
-                Session::addMessageAfterRedirect(
+                trigger_error(
                     sprintf(
-                        __('Failed to delete the file %1$s (%2$s)'),
+                        'Failed to delete the file %1$s (%2$s)',
                         $input['current_filename'],
                         GLPI_DOC_DIR . "/" . $input['current_filepath']
+                    ),
+                    E_USER_WARNING
+                );
+                Session::addMessageAfterRedirect(
+                    sprintf(
+                        __('Failed to delete the file %1$s'),
+                        $input['current_filename']
                     ),
                     false,
                     ERROR
@@ -1244,6 +1294,12 @@ class Document extends CommonDBTM
      **/
     public static function moveDocument(array &$input, $filename)
     {
+        if (str_contains($filename, '/') || str_contains($filename, '\\')) {
+            // Filename is not supposed to contains directory separators.
+            trigger_error(sprintf('Moving file `%s` is forbidden for security reasons.', $filename), E_USER_WARNING);
+            return false;
+        }
+
         $prefix = '';
         if (isset($input['_prefix_filename'])) {
             $prefix = array_shift($input['_prefix_filename']);
@@ -1257,8 +1313,12 @@ class Document extends CommonDBTM
         }
 
         if (!is_file($fullpath)) {
+            trigger_error(
+                sprintf('File %s not found.', $fullpath),
+                E_USER_WARNING
+            );
             Session::addMessageAfterRedirect(
-                sprintf(__('File %s not found.'), $fullpath),
+                sprintf(__('File %s not found.'), $filename),
                 false,
                 ERROR
             );
@@ -1287,16 +1347,23 @@ class Document extends CommonDBTM
         ) {
             if (unlink(GLPI_DOC_DIR . "/" . $input['current_filepath'])) {
                 Session::addMessageAfterRedirect(sprintf(
-                    __('Succesful deletion of the file %s'),
+                    __('Successful deletion of the file %s'),
                     $input['current_filename']
                 ));
             } else {
                // TRANS: %1$s is the curent filename, %2$s is its directory
-                Session::addMessageAfterRedirect(
+                trigger_error(
                     sprintf(
-                        __('Failed to delete the file %1$s (%2$s)'),
+                        'Failed to delete the file %1$s (%2$s)',
                         $input['current_filename'],
                         GLPI_DOC_DIR . "/" . $input['current_filepath']
+                    ),
+                    E_USER_WARNING
+                );
+                Session::addMessageAfterRedirect(
+                    sprintf(
+                        __('Failed to delete the file %1$s'),
+                        $input['current_filename']
                     ),
                     false,
                     ERROR
@@ -1307,24 +1374,13 @@ class Document extends CommonDBTM
        // Local file : try to detect mime type
         $input['mime'] = Toolbox::getMime($fullpath);
 
-        if (
-            is_writable(GLPI_TMP_DIR)
-            && is_writable($fullpath)
-        ) { // Move if allowed
-            if (self::renameForce($fullpath, GLPI_DOC_DIR . "/" . $new_path)) {
-                Session::addMessageAfterRedirect(__('Document move succeeded.'));
-            } else {
-                Session::addMessageAfterRedirect(__('File move failed.'), false, ERROR);
-                return false;
-            }
-        } else { // Copy (will overwrite dest file is present)
-            if (copy($fullpath, GLPI_DOC_DIR . "/" . $new_path)) {
-                Session::addMessageAfterRedirect(__('Document copy succeeded.'));
-            } else {
-                Session::addMessageAfterRedirect(__('File move failed'), false, ERROR);
-                @unlink($fullpath);
-                return false;
-            }
+        // Copy (will overwrite dest file if present)
+        if (copy($fullpath, GLPI_DOC_DIR . "/" . $new_path)) {
+            Session::addMessageAfterRedirect(__('Document copy succeeded.'));
+        } else {
+            Session::addMessageAfterRedirect(__('File move failed'), false, ERROR);
+            @unlink($fullpath);
+            return false;
         }
 
        // For display
@@ -1343,7 +1399,7 @@ class Document extends CommonDBTM
      * @param &$input    array of datas need for add/update (will be completed)
      * @param $FILEDESC        FILE descriptor
      *
-     * @return true on success
+     * @return boolean
      **/
     public static function uploadDocument(array &$input, $FILEDESC)
     {
@@ -1388,16 +1444,23 @@ class Document extends CommonDBTM
         ) {
             if (unlink(GLPI_DOC_DIR . "/" . $input['current_filepath'])) {
                 Session::addMessageAfterRedirect(sprintf(
-                    __('Succesful deletion of the file %s'),
+                    __('Successful deletion of the file %s'),
                     $input['current_filename']
                 ));
             } else {
                // TRANS: %1$s is the curent filename, %2$s is its directory
-                Session::addMessageAfterRedirect(
+                trigger_error(
                     sprintf(
-                        __('Failed to delete the file %1$s (%2$s)'),
+                        'Failed to delete the file %1$s (%2$s)',
                         $input['current_filename'],
                         GLPI_DOC_DIR . "/" . $input['current_filepath']
+                    ),
+                    E_USER_WARNING
+                );
+                Session::addMessageAfterRedirect(
+                    sprintf(
+                        __('Failed to delete the file %1$s'),
+                        $input['current_filename']
                     ),
                     false,
                     ERROR
@@ -1453,10 +1516,16 @@ class Document extends CommonDBTM
         }
 
         if (!is_dir(GLPI_DOC_DIR)) {
+            trigger_error(
+                sprintf(
+                    "The directory %s doesn't exist.",
+                    GLPI_DOC_DIR
+                ),
+                E_USER_WARNING
+            );
             Session::addMessageAfterRedirect(
                 sprintf(
-                    __("The directory %s doesn't exist."),
-                    GLPI_DOC_DIR
+                    __("Documents directory doesn't exist.")
                 ),
                 false,
                 ERROR
@@ -1471,15 +1540,22 @@ class Document extends CommonDBTM
         ) {
             Session::addMessageAfterRedirect(sprintf(
                 __('Create the directory %s'),
-                GLPI_DOC_DIR . "/" . $subdir
+                $subdir
             ));
         }
 
         if (!is_dir(GLPI_DOC_DIR . "/" . $subdir)) {
+            trigger_error(
+                sprintf(
+                    'Failed to create the directory %s.',
+                    GLPI_DOC_DIR . "/" . $subdir
+                ),
+                E_USER_WARNING
+            );
             Session::addMessageAfterRedirect(
                 sprintf(
                     __('Failed to create the directory %s. Verify that you have the correct permission'),
-                    GLPI_DOC_DIR . "/" . $subdir
+                    $subdir
                 ),
                 false,
                 ERROR
@@ -1501,7 +1577,7 @@ class Document extends CommonDBTM
             $uploaded_files = [];
             if ($handle = opendir(GLPI_UPLOAD_DIR)) {
                 while (false !== ($file = readdir($handle))) {
-                    if (($file != '.') && ($file != '..') && ($file != 'remove.txt')) {
+                    if (!in_array($file, ['.', '..', '.gitkeep', 'remove.txt'])) {
                         $dir = self::isValidDoc($file);
                         if (!empty($dir)) {
                             $uploaded_files[$file] = $file;
@@ -1529,6 +1605,7 @@ class Document extends CommonDBTM
      **/
     public static function isValidDoc($filename)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $splitter = explode(".", $filename);
@@ -1582,7 +1659,11 @@ class Document extends CommonDBTM
      **/
     public static function dropdown($options = [])
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $p['name']    = 'documents_id';
         $p['entity']  = '';
@@ -1669,7 +1750,7 @@ class Document extends CommonDBTM
     public static function getMassiveActionsForItemtype(
         array &$actions,
         $itemtype,
-        $is_deleted = 0,
+        $is_deleted = false,
         CommonDBTM $checkitem = null
     ) {
         $action_prefix = 'Document_Item' . MassiveAction::CLASS_ACTION_SEPARATOR;
@@ -1720,7 +1801,7 @@ class Document extends CommonDBTM
                 return false;
             }
             $etype = exif_imagetype($file);
-            return in_array($etype, [IMAGETYPE_JPEG, IMAGETYPE_GIF, IMAGETYPE_PNG, IMAGETYPE_BMP]);
+            return in_array($etype, [IMAGETYPE_JPEG, IMAGETYPE_GIF, IMAGETYPE_PNG, IMAGETYPE_BMP, IMAGETYPE_WEBP]);
         } else {
             trigger_error(
                 'For security reasons, you should consider using exif PHP extension to properly check images.',
@@ -1729,7 +1810,7 @@ class Document extends CommonDBTM
             $fileinfo = finfo_open(FILEINFO_MIME_TYPE);
             return in_array(
                 finfo_file($fileinfo, $file),
-                ['image/jpeg', 'image/png','image/gif', 'image/bmp']
+                ['image/jpeg', 'image/png','image/gif', 'image/bmp', 'image/webp']
             );
         }
     }
@@ -1814,7 +1895,7 @@ class Document extends CommonDBTM
 
         switch ($name) {
             case 'cleanorphans':
-                return ['description' => __('Clean orphaned documents')];
+                return ['description' => __('Clean orphaned documents: deletes all documents that are not associated with any items.')];
         }
         return [];
     }
@@ -1828,6 +1909,7 @@ class Document extends CommonDBTM
      **/
     public static function cronCleanOrphans(CronTask $task)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $dtable = static::getTable();
@@ -1888,6 +1970,28 @@ class Document extends CommonDBTM
         }
 
         if ($this->fields['is_blacklisted']) {
+            return false;
+        }
+
+        return true;
+    }
+
+
+    /**
+     * It checks if a file exists and is readable
+     *
+     * @param string filename The name of the file to check.
+     *
+     * @return boolean
+     */
+    public function checkAvailability(string $filename): bool
+    {
+        $file = GLPI_DOC_DIR . '/' . $filename;
+        if (!file_exists($file)) {
+            return false;
+        }
+
+        if (!is_readable($file)) {
             return false;
         }
 

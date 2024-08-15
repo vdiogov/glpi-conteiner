@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -37,12 +37,12 @@ namespace Glpi\Console\Migration;
 
 use DBConnection;
 use Glpi\Console\AbstractCommand;
+use Glpi\Console\Command\ConfigurationCommandInterface;
 use Plugin;
-use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-class UnsignedKeysCommand extends AbstractCommand
+class UnsignedKeysCommand extends AbstractCommand implements ConfigurationCommandInterface
 {
     /**
      * Error code returned when failed to migrate one column.
@@ -62,7 +62,7 @@ class UnsignedKeysCommand extends AbstractCommand
     {
         parent::configure();
 
-        $this->setName('glpi:migration:unsigned_keys');
+        $this->setName('migration:unsigned_keys');
         $this->setDescription(__('Migrate primary/foreign keys to unsigned integers'));
     }
 
@@ -83,13 +83,16 @@ class UnsignedKeysCommand extends AbstractCommand
         if ($columns->count() === 0) {
             $output->writeln('<info>' . __('No migration needed.') . '</info>');
         } else {
+            $this->warnAboutExecutionTime();
             $this->askForConfirmation();
 
             $foreign_keys = $this->db->getForeignKeysContraints();
 
-            $progress_bar = new ProgressBar($output);
+            $progress_message = function (array $column) {
+                return sprintf(__('Migrating column "%s.%s"...'), $column['TABLE_NAME'], $column['COLUMN_NAME']);
+            };
 
-            foreach ($progress_bar->iterate($columns) as $column) {
+            foreach ($this->iterate($columns, $progress_message) as $column) {
                 $table_name  = $column['TABLE_NAME'];
                 $column_name = $column['COLUMN_NAME'];
                 $data_type   = $column['DATA_TYPE'];
@@ -115,9 +118,8 @@ class UnsignedKeysCommand extends AbstractCommand
                             $foreign_key['TABLE_NAME'],
                             $foreign_key['COLUMN_NAME']
                         );
-                        $this->writelnOutputWithProgressBar(
+                        $this->outputMessage(
                             '<error>' . $message . '</error>',
-                            $progress_bar,
                             OutputInterface::VERBOSITY_QUIET
                         );
                         $errors = true;
@@ -135,9 +137,8 @@ class UnsignedKeysCommand extends AbstractCommand
                         $table_name,
                         $column_name
                     );
-                    $this->writelnOutputWithProgressBar(
+                    $this->outputMessage(
                         '<error>' . $message . '</error>',
-                        $progress_bar,
                         OutputInterface::VERBOSITY_QUIET
                     );
                     $errors = true;
@@ -161,10 +162,8 @@ class UnsignedKeysCommand extends AbstractCommand
                             $column_name,
                             $forced_value === null ? 'NULL' : $forced_value
                         );
-                        $this->writelnOutputWithProgressBar(
-                            '<comment>' . $message . '</comment>',
-                            $progress_bar
-                        );
+                        $this->outputMessage('<comment>' . $message . '</comment>');
+
                         $result = $this->db->update(
                             $table_name,
                             [$column_name => $forced_value],
@@ -178,9 +177,8 @@ class UnsignedKeysCommand extends AbstractCommand
                                 $this->db->errno(),
                                 $this->db->error()
                             );
-                            $this->writelnOutputWithProgressBar(
+                            $this->outputMessage(
                                 '<error>' . $message . '</error>',
-                                $progress_bar,
                                 OutputInterface::VERBOSITY_QUIET
                             );
                             $errors = true;
@@ -194,9 +192,8 @@ class UnsignedKeysCommand extends AbstractCommand
                             $table_name,
                             $column_name
                         );
-                        $this->writelnOutputWithProgressBar(
+                        $this->outputMessage(
                             '<error>' . $message . '</error>',
-                            $progress_bar,
                             OutputInterface::VERBOSITY_QUIET
                         );
                         $errors = true;
@@ -204,12 +201,6 @@ class UnsignedKeysCommand extends AbstractCommand
                         continue; // Do not migrate this column
                     }
                 }
-
-                $this->writelnOutputWithProgressBar(
-                    '<comment>' . sprintf(__('Migrating column "%s.%s"...'), $table_name, $column_name) . '</comment>',
-                    $progress_bar,
-                    OutputInterface::VERBOSITY_VERBOSE
-                );
 
                 $query = sprintf(
                     'ALTER TABLE %s MODIFY COLUMN %s %s unsigned %s %s %s',
@@ -221,7 +212,7 @@ class UnsignedKeysCommand extends AbstractCommand
                     $extra
                 );
 
-                $result = $this->db->query($query);
+                $result = $this->db->doQuery($query);
 
                 if ($result === false) {
                     $message = sprintf(
@@ -231,9 +222,8 @@ class UnsignedKeysCommand extends AbstractCommand
                         $this->db->errno(),
                         $this->db->error()
                     );
-                    $this->writelnOutputWithProgressBar(
+                    $this->outputMessage(
                         '<error>' . $message . '</error>',
-                        $progress_bar,
                         OutputInterface::VERBOSITY_QUIET
                     );
                     $errors = true;
@@ -243,8 +233,6 @@ class UnsignedKeysCommand extends AbstractCommand
                     continue; // Go to next column
                 }
             }
-
-            $this->output->write(PHP_EOL);
         }
 
         if (!DBConnection::updateConfigProperty(DBConnection::PROPERTY_ALLOW_SIGNED_KEYS, false)) {
@@ -265,9 +253,11 @@ class UnsignedKeysCommand extends AbstractCommand
                 }
                 $message .= "\n";
                 $message .= sprintf(
-                    '<comment>' . __('You should try to update following plugins to their latest version and run the command again: %s.') . '</comment>',
+                    '<comment>' . __('Some errors are related to following plugins: %s.') . '</comment>',
                     implode(', ', $plugins_names)
                 );
+                $message .= "\n";
+                $message .= '<comment>' . __('You should try to update these plugins to their latest version and run the command again.') . '</comment>';
             }
             throw new \Glpi\Console\Exception\EarlyExitException(
                 $message,
@@ -280,5 +270,14 @@ class UnsignedKeysCommand extends AbstractCommand
         }
 
         return 0; // Success
+    }
+
+    public function getConfigurationFilesToUpdate(InputInterface $input): array
+    {
+        $config_files_to_update = ['config_db.php'];
+        if (file_exists(GLPI_CONFIG_DIR . '/config_db_slave.php')) {
+            $config_files_to_update[] = 'config_db_slave.php';
+        }
+        return $config_files_to_update;
     }
 }

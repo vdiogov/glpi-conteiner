@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -35,6 +35,7 @@
 
 namespace Glpi\System;
 
+use Glpi\System\Requirement\DataDirectoriesProtectedPath;
 use Glpi\System\Requirement\DbEngine;
 use Glpi\System\Requirement\DbTimezones;
 use Glpi\System\Requirement\DirectoriesWriteAccess;
@@ -42,11 +43,14 @@ use Glpi\System\Requirement\DirectoryWriteAccess;
 use Glpi\System\Requirement\Extension;
 use Glpi\System\Requirement\ExtensionConstant;
 use Glpi\System\Requirement\ExtensionGroup;
+use Glpi\System\Requirement\InstallationNotOverriden;
+use Glpi\System\Requirement\IntegerSize;
 use Glpi\System\Requirement\LogsWriteAccess;
 use Glpi\System\Requirement\MemoryLimit;
 use Glpi\System\Requirement\MysqliMysqlnd;
+use Glpi\System\Requirement\PhpSupportedVersion;
 use Glpi\System\Requirement\PhpVersion;
-use Glpi\System\Requirement\ProtectedWebAccess;
+use Glpi\System\Requirement\SafeDocumentRoot;
 use Glpi\System\Requirement\SeLinux;
 use Glpi\System\Requirement\SessionsConfiguration;
 use Glpi\System\Requirement\SessionsSecurityConfiguration;
@@ -75,10 +79,22 @@ class RequirementsManager
 
         $requirements[] = new MysqliMysqlnd();
 
-       // Mandatory PHP extensions that are defaultly enabled
-        $requirements[] = new ExtensionGroup(__('PHP core extensions'), ['dom', 'fileinfo', 'json', 'simplexml']);
+        // Mandatory PHP extensions that are defaultly enabled but can be disabled
+        $requirements[] = new ExtensionGroup(
+            __('PHP core extensions'),
+            [
+                'dom',
+                'fileinfo',
+                'filter',
+                'libxml',
+                'json',
+                'simplexml',
+                'xmlreader', // required/used by simplepie/simplepie and sabre/xml
+                'xmlwriter', // required/used by sabre/xml
+            ]
+        );
 
-       // Mandatory PHP extensions that are NOT defaultly enabled
+        // Mandatory PHP extensions that are NOT defaultly enabled
         $requirements[] = new Extension(
             'curl',
             false,
@@ -93,11 +109,6 @@ class RequirementsManager
             'intl',
             false,
             __('Required for internationalization.')
-        );
-        $requirements[] = new Extension(
-            'libxml',
-            false,
-            __('Required for XML handling.')
         );
         $requirements[] = new Extension(
             'zlib',
@@ -115,11 +126,14 @@ class RequirementsManager
             $requirements[] = new DbEngine($db);
         }
 
+        $requirements[] = new InstallationNotOverriden($db);
+
+        /** @var \Psr\Log\LoggerInterface $PHPLOGGER */
         global $PHPLOGGER;
         $requirements[] = new LogsWriteAccess($PHPLOGGER);
 
         $requirements[] = new DirectoriesWriteAccess(
-            __('Permissions for GLPI var directories'),
+            __('Permissions for GLPI data directories'),
             array_filter(
                 Variables::getDataDirectories(),
                 function ($directory) {
@@ -128,13 +142,19 @@ class RequirementsManager
             )
         );
 
-        $requirements[] = new ProtectedWebAccess(Variables::getDataDirectories());
-
         $requirements[] = new SeLinux();
 
-       // Below requirements are optionals
+        // Below requirements are optionals
 
+        $requirements[] = new PhpSupportedVersion();
+
+        $safe_doc_root_requirement = new SafeDocumentRoot();
+        $requirements[] = $safe_doc_root_requirement;
+        if (!$safe_doc_root_requirement->isValidated()) {
+            $requirements[] = new DataDirectoriesProtectedPath(Variables::getDataDirectoriesConstants());
+        }
         $requirements[] = new SessionsSecurityConfiguration();
+        $requirements[] = new IntegerSize();
         $requirements[] = new Extension(
             'exif',
             true,
@@ -150,15 +170,11 @@ class RequirementsManager
             true,
             __('Enable email sending using SSL/TLS.')
         );
-        $requirements[] = new Extension(
-            'zip',
+        $requirements[] = new ExtensionGroup(
+            __('PHP extensions for marketplace'),
+            ['bz2', 'Phar', 'zip'],
             true,
-            __('Enable installation of zip packages from marketplace.')
-        );
-        $requirements[] = new Extension(
-            'bz2',
-            true,
-            __('Enable installation of bz2 packages from marketplace.')
+            __('Enable support of most common packages formats in marketplace.')
         );
         $requirements[] = new Extension(
             'Zend OPcache',

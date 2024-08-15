@@ -1,7 +1,7 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 445:
+/***/ 68:
 /***/ (() => {
 
 var leafletControlGeocoder = (function (exports, L) {
@@ -1979,7 +1979,7 @@ var leafletControlGeocoder = (function (exports, L) {
 
 /***/ }),
 
-/***/ 447:
+/***/ 70:
 /***/ (() => {
 
 L.Control.Fullscreen = L.Control.extend({
@@ -2138,13 +2138,13 @@ L.control.fullscreen = function (options) {
 
 /***/ }),
 
-/***/ 438:
+/***/ 61:
 /***/ ((module, exports, __webpack_require__) => {
 
 var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;(function (factory, window) {
     // define an AMD module that relies on 'leaflet'
     if (true) {
-        !(__WEBPACK_AMD_DEFINE_ARRAY__ = [__webpack_require__(434),__webpack_require__(439)], __WEBPACK_AMD_DEFINE_RESULT__ = (function (L, Spinner) {
+        !(__WEBPACK_AMD_DEFINE_ARRAY__ = [__webpack_require__(57),__webpack_require__(62)], __WEBPACK_AMD_DEFINE_RESULT__ = (function (L, Spinner) {
             factory(L, Spinner);
         }).apply(exports, __WEBPACK_AMD_DEFINE_ARRAY__),
 		__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
@@ -2204,7 +2204,7 @@ var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;(function (facto
 
 /***/ }),
 
-/***/ 439:
+/***/ 62:
 /***/ (function(module, exports, __webpack_require__) {
 
 var __WEBPACK_AMD_DEFINE_FACTORY__, __WEBPACK_AMD_DEFINE_RESULT__;/**
@@ -2592,7 +2592,7 @@ var __WEBPACK_AMD_DEFINE_FACTORY__, __WEBPACK_AMD_DEFINE_RESULT__;/**
 
 /***/ }),
 
-/***/ 443:
+/***/ 66:
 /***/ (function() {
 
 /*
@@ -2724,7 +2724,7 @@ var __WEBPACK_AMD_DEFINE_FACTORY__, __WEBPACK_AMD_DEFINE_RESULT__;/**
 
 /***/ }),
 
-/***/ 440:
+/***/ 63:
 /***/ (function(__unused_webpack_module, exports) {
 
 /*
@@ -5448,7 +5448,7 @@ var __WEBPACK_AMD_DEFINE_FACTORY__, __WEBPACK_AMD_DEFINE_RESULT__;/**
 
 /***/ }),
 
-/***/ 434:
+/***/ 57:
 /***/ (function(__unused_webpack_module, exports) {
 
 /* @preserve
@@ -19516,7 +19516,7 @@ var __WEBPACK_AMD_DEFINE_FACTORY__, __WEBPACK_AMD_DEFINE_RESULT__;/**
 
 /***/ }),
 
-/***/ 446:
+/***/ 69:
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -19526,7 +19526,7 @@ __webpack_require__.r(__webpack_exports__);
 
 /***/ }),
 
-/***/ 448:
+/***/ 71:
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -19536,7 +19536,7 @@ __webpack_require__.r(__webpack_exports__);
 
 /***/ }),
 
-/***/ 444:
+/***/ 67:
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -19546,7 +19546,7 @@ __webpack_require__.r(__webpack_exports__);
 
 /***/ }),
 
-/***/ 442:
+/***/ 65:
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -19556,7 +19556,7 @@ __webpack_require__.r(__webpack_exports__);
 
 /***/ }),
 
-/***/ 441:
+/***/ 64:
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -19566,7 +19566,7 @@ __webpack_require__.r(__webpack_exports__);
 
 /***/ }),
 
-/***/ 435:
+/***/ 58:
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -19576,7 +19576,7 @@ __webpack_require__.r(__webpack_exports__);
 
 /***/ }),
 
-/***/ 436:
+/***/ 59:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
 "use strict";
@@ -19584,7 +19584,7 @@ module.exports = __webpack_require__.p + "leaflet/dist/images/marker-icon-2x.png
 
 /***/ }),
 
-/***/ 437:
+/***/ 60:
 /***/ ((module, __unused_webpack_exports, __webpack_require__) => {
 
 "use strict";
@@ -19592,13 +19592,13 @@ module.exports = __webpack_require__.p + "leaflet/dist/images/marker-shadow.png"
 
 /***/ }),
 
-/***/ 433:
+/***/ 56:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   "Spinner": () => (/* binding */ Spinner)
+/* harmony export */   Spinner: () => (/* binding */ Spinner)
 /* harmony export */ });
 var __assign = (undefined && undefined.__assign) || function () {
     __assign = Object.assign || function(t) {
@@ -19856,8 +19856,6 @@ function convertOffset(x, y, degrees) {
 /******/ 	
 /************************************************************************/
 var __webpack_exports__ = {};
-// This entry need to be wrapped in an IIFE because it need to be isolated against other modules in the chunk.
-(() => {
 /**
  * ---------------------------------------------------------------------
  *
@@ -19865,7 +19863,7 @@ var __webpack_exports__ = {};
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -19893,27 +19891,25 @@ var __webpack_exports__ = {};
 
 // spin.js dependency
 // Spinner object have to be accessible in window context
-window.Spinner = (__webpack_require__(433).Spinner);
+window.Spinner = (__webpack_require__(56).Spinner);
 
 // Leaflet core lib
-__webpack_require__(434);
-__webpack_require__(435);
-__webpack_require__(436); // image is not present in CSS and will not be copied automatically
-__webpack_require__(437); // image is not present in CSS and will not be copied automatically
+__webpack_require__(57);
+__webpack_require__(58);
+__webpack_require__(59); // image is not present in CSS and will not be copied automatically
+__webpack_require__(60); // image is not present in CSS and will not be copied automatically
 
 // Leaflet plugins
-__webpack_require__(438);
-__webpack_require__(440);
-__webpack_require__(441);
-__webpack_require__(442);
-__webpack_require__(443);
-__webpack_require__(444);
-__webpack_require__(445);
-__webpack_require__(446);
-__webpack_require__(447);
-__webpack_require__(448);
-
-})();
+__webpack_require__(61);
+__webpack_require__(63);
+__webpack_require__(64);
+__webpack_require__(65);
+__webpack_require__(66);
+__webpack_require__(67);
+__webpack_require__(68);
+__webpack_require__(69);
+__webpack_require__(70);
+__webpack_require__(71);
 
 /******/ })()
 ;

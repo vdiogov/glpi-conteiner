@@ -5,7 +5,7 @@
  #
  # http://glpi-project.org
  #
- # @copyright 2015-2022 Teclib' and contributors.
+ # @copyright 2015-2024 Teclib' and contributors.
  # @copyright 2003-2014 by the INDEPNET Development Team.
  # @licence   https://www.gnu.org/licenses/gpl-3.0.html
  #
@@ -45,7 +45,7 @@
          <tr class="tab_bg_1">
             <td>{{ rss_item.timestamp }}</td>
             <td>
-               {% if rss_item.link is defined and rss_item.link is not null %}
+               {% if rss_item.link is not empty %}
                   <a target="_blank" href="{{ rss_item.link }}">{{ rss_item.title }}</a>
                {% else %}
                   {{ rss_item.title }}

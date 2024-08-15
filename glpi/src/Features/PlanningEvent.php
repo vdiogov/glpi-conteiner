@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -66,7 +66,7 @@ trait PlanningEvent
         }
 
         if ($this->isField('rrule')) {
-            $this->fields['rrule'] = [];
+            $this->fields['rrule'] = '';
         }
 
         if ($this->isField('is_recursive')) {
@@ -113,6 +113,7 @@ trait PlanningEvent
 
     public function prepareInputForAdd($input)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         if (
@@ -257,7 +258,7 @@ trait PlanningEvent
     }
 
 
-    public function post_updateItem($history = 1)
+    public function post_updateItem($history = true)
     {
         if (
             !isset($this->input['_no_check_plan'])
@@ -381,7 +382,11 @@ trait PlanningEvent
      **/
     public static function populatePlanning($options = []): array
     {
-        global $DB, $CFG_GLPI;
+        /**
+         * @var array $CFG_GLPI
+         * @var \DBmysql $DB
+         */
+        global $CFG_GLPI, $DB;
 
         $default_options = [
             'genical'             => false,
@@ -652,10 +657,11 @@ trait PlanningEvent
      *                    default '')
      * @param $complete   complete display (more details) (default 0)
      *
-     * @return Nothing (display function)
+     * @return void (display function)
      **/
     public static function displayPlanningItem(array $val, $who, $type = "", $complete = 0)
     {
+        /** @var array $CFG_GLPI */
         global $CFG_GLPI;
 
         $html = "";
@@ -1039,7 +1045,7 @@ trait PlanningEvent
                 'table'         => static::getTable(),
                 'field'         => 'users_id_guests',
                 'name'          => __('Guests'),
-                'datatype'      => 'text',
+                'datatype'      => 'specific',
             ];
         }
 
@@ -1075,5 +1081,29 @@ trait PlanningEvent
         }
 
         return $tab;
+    }
+
+    public static function getSpecificValueToDisplay($field, $values, array $options = [])
+    {
+
+        if (!is_array($values)) {
+            $values = [$field => $values];
+        }
+        switch ($field) {
+            case 'users_id_guests':
+                $users = [];
+                if (empty($values[$field])) {
+                    return '';
+                }
+                foreach (json_decode($values[$field], true) as $user_id) {
+                    $users[] = sprintf(
+                        '<a href="%s">%s</a>',
+                        User::getFormURLWithID($user_id),
+                        getUserName($user_id, 1)
+                    );
+                }
+                return implode(', ', $users);
+        }
+        return parent::getSpecificValueToDisplay($field, $values, $options);
     }
 }

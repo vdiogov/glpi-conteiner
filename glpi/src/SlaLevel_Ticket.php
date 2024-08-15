@@ -7,7 +7,7 @@
  *
  * http://glpi-project.org
  *
- * @copyright 2015-2022 Teclib' and contributors.
+ * @copyright 2015-2024 Teclib' and contributors.
  * @copyright 2003-2014 by the INDEPNET Development Team.
  * @licence   https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -50,10 +50,11 @@ class SlaLevel_Ticket extends CommonDBTM
      *
      * @since 9.1 2 mandatory parameters
      *
-     * @return true if succeed else false
+     * @return boolean
      **/
     public function getFromDBForTicket($ID, $slaType)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -99,6 +100,7 @@ class SlaLevel_Ticket extends CommonDBTM
      **/
     public function deleteForTicket($tickets_id, $slaType)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $iterator = $DB->request([
@@ -157,6 +159,7 @@ class SlaLevel_Ticket extends CommonDBTM
      **/
     public static function cronSlaTicket(CronTask $task)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $tot = 0;
@@ -242,6 +245,12 @@ class SlaLevel_Ticket extends CommonDBTM
                 $ticket->fields['_suppliers_id_assign'][] = $supplier['suppliers_id'];
             }
 
+            $itil_project = new Itil_Project();
+            $itil_projects = $itil_project->find(["itemtype" => Ticket::class, "items_id" => $data['tickets_id']]);
+            foreach ($itil_projects as $rel_values) {
+                $ticket->fields['assign_project'][] = $rel_values['projects_id'];
+            }
+
             $slalevel = new SlaLevel();
             $sla      = new SLA();
            // Check if sla datas are OK
@@ -314,6 +323,7 @@ class SlaLevel_Ticket extends CommonDBTM
      */
     public static function replayForTicket($tickets_id, $slaType)
     {
+        /** @var \DBmysql $DB */
         global $DB;
 
         $criteria = [
